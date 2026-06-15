@@ -1,245 +1,259 @@
-import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-import sqlite3
-import random
-import string
-from datetime import datetime
+import asyncio
+import os
+import logging
+from flask import Flask, request, render_template_string
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
+from telegram.constants import ParseMode
+import aiohttp
+import time
 
-# ========== КОНФИГУРАЦИЯ ==========
-BOT_TOKEN = "ВАШ_ТОКЕН_СЮДА"  # замените на токен от @BotFather
-bot = telebot.TeleBot(BOT_TOKEN)
-DB_NAME = "sherlock_355.db"
+# -------------------- Настройки --------------------
+logging.basicConfig(level=logging.INFO)
+TOKEN = os.environ.get("TOKEN")
+if not TOKEN:
+    raise RuntimeError("Переменная окружения TOKEN не установлена")
 
-# ========== СОЗДАНИЕ БАЗЫ ДАННЫХ С 355 САЙТАМИ ==========
-def init_db():
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
+# Flask-приложение (веб-сайт + вебхук)
+app = Flask(__name__)
 
-    # Таблица сайтов (источников) - 355 штук
-    c.execute('''CREATE TABLE IF NOT EXISTS sites (
-        id INTEGER PRIMARY KEY,
-        site_name TEXT UNIQUE,
-        url TEXT
-    )''')
+# -------------------- База сайтов для поиска (реальный пробив) --------------------
+SITES = {
+    "Facebook": "https://www.facebook.com/{}",
+    "Instagram": "https://www.instagram.com/{}",
+    "Twitter": "https://twitter.com/{}",
+    "YouTube": "https://www.youtube.com/@{}",
+    "GitHub": "https://github.com/{}",
+    "Reddit": "https://www.reddit.com/user/{}",
+    "Pinterest": "https://www.pinterest.com/{}",
+    "TikTok": "https://www.tiktok.com/@{}",
+    "Snapchat": "https://www.snapchat.com/add/{}",
+    "Telegram": "https://t.me/{}",
+    "Steam": "https://steamcommunity.com/id/{}",
+    "VK": "https://vk.com/{}",
+    "Tumblr": "https://{}.tumblr.com",
+    "Flickr": "https://www.flickr.com/photos/{}",
+    "SoundCloud": "https://soundcloud.com/{}",
+    "Medium": "https://medium.com/@{}",
+    "Patreon": "https://www.patreon.com/{}",
+    "Twitch": "https://www.twitch.tv/{}",
+    "DeviantArt": "https://www.deviantart.com/{}",
+    "About.me": "https://about.me/{}",
+    "Spotify": "https://open.spotify.com/user/{}",
+    "Keybase": "https://keybase.io/{}",
+    "Bitbucket": "https://bitbucket.org/{}",
+    "HackerNews": "https://news.ycombinator.com/user?id={}",
+    "Pastebin": "https://pastebin.com/u/{}",
+    "Roblox": "https://www.roblox.com/user.aspx?username={}",
+    "BuzzFeed": "https://www.buzzfeed.com/{}",
+    "Mixcloud": "https://www.mixcloud.com/{}",
+    "WordPress": "https://{}.wordpress.com",
+    "Blogger": "https://{}.blogspot.com",
+    "LiveJournal": "https://{}.livejournal.com",
+}
 
-    # Таблица людей
-    c.execute('''CREATE TABLE IF NOT EXISTS persons (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        full_name TEXT,
-        phone TEXT,
-        email TEXT,
-        car_number TEXT,
-        birth_date TEXT,
-        address TEXT,
-        passport TEXT,
-        social_media TEXT
-    )''')
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+}
 
-    # Таблица связей "человек - сайт" (на каких сайтах пробито)
-    c.execute('''CREATE TABLE IF NOT EXISTS person_site (
-        person_id INTEGER,
-        site_id INTEGER,
-        FOREIGN KEY(person_id) REFERENCES persons(id),
-        FOREIGN KEY(site_id) REFERENCES sites(id)
-    )''')
-
-    # Заполняем 355 сайтов, если их ещё нет
-    c.execute("SELECT COUNT(*) FROM sites")
-    if c.fetchone()[0] == 0:
-        sites_data = []
-        for i in range(1, 356):
-            site_name = f"leak{str(i).zfill(3)}.ru"
-            url = f"https://{site_name}/search"
-            sites_data.append((site_name, url))
-        c.executemany("INSERT INTO sites (site_name, url) VALUES (?, ?)", sites_data)
-        print("✅ Добавлено 355 сайтов в базу.")
-
-    # Заполняем тестовыми людьми (100 записей для демонстрации)
-    c.execute("SELECT COUNT(*) FROM persons")
-    if c.fetchone()[0] == 0:
-        # Генерируем 100 фейковых профилей
-        for _ in range(100):
-            full_name = random.choice(['Иван Иванов','Петр Петров','Сидор Сидоров','Анна Смирнова','Елена Кузнецова','Дмитрий Соколов','Ольга Попова','Алексей Лебедев','Татьяна Козлова','Сергей Морозов']) + ' ' + str(random.randint(1,99))
-            phone = '+7' + ''.join(random.choices(string.digits, k=10))
-            email = ''.join(random.choices(string.ascii_lowercase, k=8)) + '@mail.ru'
-            car_number = random.choice('АВЕКМНОРСТУХ') + ''.join(random.choices(string.digits, k=3)) + \
-                         random.choice('АВЕКМНОРСТУХ') + random.choice('АВЕКМНОРСТУХ') + \
-                         str(random.randint(1,199)).zfill(3)
-            birth_date = f"{random.randint(1950,2010)}-{random.randint(1,12):02d}-{random.randint(1,28):02d}"
-            address = f"г. {random.choice(['Москва','СПб','Новосибирск','Екатеринбург','Казань'])}, ул. {random.choice(['Ленина','Пушкина','Гагарина'])}, д.{random.randint(1,100)}"
-            passport = f"{random.randint(1000,9999)} {random.randint(100000,999999)}"
-            social = f"vk.com/id{random.randint(1000,9999)}"
-            c.execute('''INSERT INTO persons (full_name, phone, email, car_number, birth_date, address, passport, social_media)
-                         VALUES (?,?,?,?,?,?,?,?)''',
-                      (full_name, phone, email, car_number, birth_date, address, passport, social))
-            person_id = c.lastrowid
-            # Каждому человеку привязываем случайные 5-30 сайтов из 355
-            num_sites = random.randint(5, 30)
-            site_ids = random.sample(range(1, 356), num_sites)
-            for sid in site_ids:
-                c.execute("INSERT INTO person_site (person_id, site_id) VALUES (?, ?)", (person_id, sid))
-        conn.commit()
-        print("✅ Добавлено 100 тестовых профилей, каждый привязан к нескольким сайтам.")
-
-    conn.close()
-
-init_db()
-
-# ========== ПОИСК В БАЗЕ ==========
-def search_person(query, search_type):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
-    if search_type == 'phone':
-        c.execute("SELECT * FROM persons WHERE phone LIKE ? LIMIT 10", (f'%{query}%',))
-    elif search_type == 'email':
-        c.execute("SELECT * FROM persons WHERE email LIKE ? LIMIT 10", (f'%{query}%',))
-    elif search_type == 'car_number':
-        c.execute("SELECT * FROM persons WHERE car_number LIKE ? LIMIT 10", (f'%{query.upper()}%',))
-    elif search_type == 'full_name':
-        c.execute("SELECT * FROM persons WHERE full_name LIKE ? LIMIT 10", (f'%{query}%',))
-    elif search_type == 'birth_date':
-        c.execute("SELECT * FROM persons WHERE birth_date = ? LIMIT 10", (query,))
-    else:
-        return []
-    persons = c.fetchall()
-    results = []
-    for p in persons:
-        person_id = p[0]
-        # получаем сайты для этого человека
-        c.execute('''SELECT site_name FROM sites 
-                     JOIN person_site ON sites.id = person_site.site_id 
-                     WHERE person_site.person_id = ?''', (person_id,))
-        sites = [row[0] for row in c.fetchall()]
-        results.append((p, sites))
-    conn.close()
-    return results
-
-def format_result(person, sites):
-    (pid, full_name, phone, email, car_number, birth_date, address, passport, social_media) = person
+# -------------------- Асинхронная проверка профиля --------------------
+async def check_site(session, name, url_template):
+    url = url_template.format(name)
     try:
-        birth_fmt = datetime.strptime(birth_date, '%Y-%m-%d').strftime('%d.%m.%Y')
-    except:
-        birth_fmt = birth_date or 'не указана'
-    sites_preview = ', '.join(sites[:10]) + (f' + ещё {len(sites)-10}' if len(sites) > 10 else '')
-    return (f"📌 *РЕЗУЛЬТАТ ПРОБИВА*\n"
-            f"┌─────────────────────\n"
-            f"│ 👤 *ФИО:* {full_name}\n"
-            f"│ 📞 *Телефон:* `{phone}`\n"
-            f"│ 📧 *Email:* `{email}`\n"
-            f"│ 🚗 *Авто:* `{car_number}`\n"
-            f"│ 🎂 *Дата рождения:* {birth_fmt}\n"
-            f"│ 🏠 *Адрес:* {address}\n"
-            f"│ 🛂 *Паспорт:* {passport}\n"
-            f"│ 🌐 *Соцсети:* {social_media}\n"
-            f"│ 🌍 *Найден на {len(sites)} из 355 сайтов:*\n"
-            f"│   {sites_preview}\n"
-            f"└─────────────────────")
+        async with session.get(url, headers=HEADERS, timeout=10, allow_redirects=True) as resp:
+            if resp.status == 200:
+                text = await resp.text()
+                lower = text.lower()
+                # Исключаем страницы-заглушки
+                if any(phrase in lower for phrase in ["not found", "doesn't exist", "page not found", "sorry", "no user", "error 404"]):
+                    return None
+                return url
+            return None
+    except Exception as e:
+        logging.debug(f"Ошибка проверки {url}: {e}")
+        return None
 
-# ========== КЛАВИАТУРА ==========
-def main_menu():
-    kb = InlineKeyboardMarkup(row_width=2)
-    buttons = [
-        InlineKeyboardButton("📞 По номеру телефона", callback_data="search_phone"),
-        InlineKeyboardButton("📧 По email", callback_data="search_email"),
-        InlineKeyboardButton("🚗 По номеру авто", callback_data="search_car"),
-        InlineKeyboardButton("👤 По ФИО", callback_data="search_name"),
-        InlineKeyboardButton("🎂 По дате рождения", callback_data="search_birth"),
-        InlineKeyboardButton("❓ Помощь", callback_data="help")
-    ]
-    kb.add(*buttons)
-    return kb
+async def osint_search(username: str) -> dict:
+    found = {}
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+        site_names = []
+        for site_name, url_template in SITES.items():
+            site_names.append(site_name)
+            tasks.append(check_site(session, username, url_template))
+        results = await asyncio.gather(*tasks)
+        for site, result in zip(site_names, results):
+            if result:
+                found[site] = result
+    return found
 
-@bot.message_handler(commands=['start'])
-def start(message):
-    bot.send_message(message.chat.id,
-                     "🔍 *Бот «Шерлок» — пробив по 355 сайтам*\n"
-                     "База данных содержит более 100 профилей и 355 источников утечек.\n"
-                     "Выберите тип поиска:",
-                     reply_markup=main_menu(),
-                     parse_mode='Markdown')
+# -------------------- Обработчики Telegram --------------------
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [[InlineKeyboardButton("📖 Помощь", callback_data="help")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    text = (
+        "🕵️ <b>Factum OSINT</b> — разведка по нику\n\n"
+        "Я проверяю существование аккаунта на десятках платформ.\n"
+        "Отправь команду: <code>/find username</code>\n"
+        "Например: <code>/find ivanov</code>\n\n"
+        "⚡ Найденные профили получаешь с прямыми ссылками."
+    )
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
 
-@bot.callback_query_handler(func=lambda call: True)
-def callback_handler(call):
-    if call.data == "search_phone":
-        bot.send_message(call.message.chat.id, "📞 Введите номер телефона (полный или часть):")
-        bot.register_next_step_handler(call.message, process_phone)
-    elif call.data == "search_email":
-        bot.send_message(call.message.chat.id, "📧 Введите email (полный или часть):")
-        bot.register_next_step_handler(call.message, process_email)
-    elif call.data == "search_car":
-        bot.send_message(call.message.chat.id, "🚗 Введите номер машины (пример: А123ВВ199):")
-        bot.register_next_step_handler(call.message, process_car)
-    elif call.data == "search_name":
-        bot.send_message(call.message.chat.id, "👤 Введите ФИО (можно неполное):")
-        bot.register_next_step_handler(call.message, process_name)
-    elif call.data == "search_birth":
-        bot.send_message(call.message.chat.id, "🎂 Введите дату рождения в формате ГГГГ-ММ-ДД:")
-        bot.register_next_step_handler(call.message, process_birth)
-    elif call.data == "help":
-        bot.send_message(call.message.chat.id,
-                         "🔎 *Инструкция*\n"
-                         "1. Выберите категорию поиска.\n"
-                         "2. Введите значение (можно часть).\n"
-                         "3. Бот покажет до 10 совпадений и список из 355 сайтов, где найден человек.\n"
-                         "⚠️ Данные тестовые. Для реального пробива замените базу на настоящие утечки.",
-                         parse_mode='Markdown')
-        bot.send_message(call.message.chat.id, "Меню:", reply_markup=main_menu())
-    bot.answer_callback_query(call.id)
+async def help_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        "🔎 <b>Использование:</b>\n"
+        "<code>/find никнейм</code> — поиск по 30+ сайтам.\n\n"
+        "Результат реальный, не имитация.\n"
+        "Бот написан в рамках OSINT-инструментария.",
+        parse_mode=ParseMode.HTML
+    )
 
-def process_phone(message):
-    query = message.text.strip()
-    if not query:
-        bot.send_message(message.chat.id, "❌ Пустой запрос.", reply_markup=main_menu())
+async def find_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("❌ Укажи никнейм. Пример: <code>/find ivanov</code>", parse_mode=ParseMode.HTML)
         return
-    results = search_person(query, 'phone')
-    send_results(message.chat.id, results, query)
-
-def process_email(message):
-    query = message.text.strip()
-    if not query:
-        bot.send_message(message.chat.id, "❌ Пустой запрос.", reply_markup=main_menu())
+    username = context.args[0].strip()
+    if len(username) < 2:
+        await update.message.reply_text("❌ Слишком короткий никнейм.")
         return
-    results = search_person(query, 'email')
-    send_results(message.chat.id, results, query)
 
-def process_car(message):
-    query = message.text.strip().upper()
-    if not query:
-        bot.send_message(message.chat.id, "❌ Пустой запрос.", reply_markup=main_menu())
-        return
-    results = search_person(query, 'car_number')
-    send_results(message.chat.id, results, query)
+    msg = await update.message.reply_text(f"🔎 <b>Ищу профили {username}...</b>", parse_mode=ParseMode.HTML)
 
-def process_name(message):
-    query = message.text.strip()
-    if not query:
-        bot.send_message(message.chat.id, "❌ Пустой запрос.", reply_markup=main_menu())
-        return
-    results = search_person(query, 'full_name')
-    send_results(message.chat.id, results, query)
+    start_time = time.time()
+    found = await osint_search(username)
+    elapsed = round(time.time() - start_time, 1)
 
-def process_birth(message):
-    query = message.text.strip()
-    if not query:
-        bot.send_message(message.chat.id, "❌ Пустой запрос.", reply_markup=main_menu())
-        return
-    try:
-        datetime.strptime(query, '%Y-%m-%d')
-    except:
-        bot.send_message(message.chat.id, "❌ Неверный формат. Используйте ГГГГ-ММ-ДД", reply_markup=main_menu())
-        return
-    results = search_person(query, 'birth_date')
-    send_results(message.chat.id, results, query)
-
-def send_results(chat_id, results, query):
-    if not results:
-        bot.send_message(chat_id, f"🔍 По запросу `{query}` ничего не найдено в 355 сайтах.", parse_mode='Markdown')
+    if found:
+        lines = [f"✅ <a href='{url}'>{site}</a>" for site, url in found.items()]
+        result_text = (
+            f"<b>🔍 Результаты для <code>{username}</code></b>\n"
+            f"⏱️ Проверено за {elapsed} сек.\n\n"
+            + "\n".join(lines)
+        )
     else:
-        bot.send_message(chat_id, f"✅ *Найдено совпадений:* {len(results)} (из 100 профилей)", parse_mode='Markdown')
-        for person, sites in results:
-            bot.send_message(chat_id, format_result(person, sites), parse_mode='Markdown')
-    bot.send_message(chat_id, "Выберите следующий поиск:", reply_markup=main_menu())
+        result_text = f"<b>🔍 Для <code>{username}</code> ничего не найдено</b>\n⏱️ Проверено за {elapsed} сек."
 
-if __name__ == "__main__":
-    print("Бот запущен. База содержит 355 сайтов и 100 профилей.")
-    bot.infinity_polling()
+    await msg.edit_text(result_text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+# -------------------- Веб-интерфейс (Flask) --------------------
+def get_webpage_html():
+    return """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Factum OSINT Bot</title>
+    <style>
+        body {
+            margin: 0;
+            background: #0a0f0f;
+            font-family: 'Courier New', monospace;
+            color: #0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            text-align: center;
+            padding: 30px;
+            border: 1px solid #0f0;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            background: rgba(0,20,0,0.6);
+            box-shadow: 0 0 25px #0f0;
+            animation: glow 2s infinite alternate;
+        }
+        h1 {
+            font-size: 3em;
+            text-shadow: 0 0 10px #0f0;
+            margin: 0 0 20px;
+        }
+        .blink {
+            animation: blink 1s steps(1) infinite;
+        }
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+        @keyframes glow {
+            from { box-shadow: 0 0 15px #0f0; }
+            to { box-shadow: 0 0 35px #0f0, 0 0 80px #0f0; }
+        }
+        p {
+            font-size: 1.2em;
+            text-shadow: 0 0 5px #0f0;
+        }
+        .btn {
+            display: inline-block;
+            margin-top: 25px;
+            padding: 10px 25px;
+            border: 2px solid #0f0;
+            color: #0f0;
+            text-decoration: none;
+            font-weight: bold;
+            border-radius: 5px;
+            transition: 0.3s;
+        }
+        .btn:hover {
+            background: #0f0;
+            color: #000;
+            box-shadow: 0 0 20px #0f0;
+        }
+        .footer {
+            margin-top: 30px;
+            font-size: 0.8em;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🕵️ FACTUM OSINT</h1>
+        <p>Бот для поиска профилей по нику в реальном времени</p>
+        <p class="blink">_</p>
+        <a class="btn" href="https://t.me/YOUR_BOT_USERNAME" target="_blank">Перейти в бот</a>
+        <div class="footer">
+            © 2025 Factum Project
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+@app.route('/')
+def index():
+    return render_template_string(get_webpage_html())
+
+# -------------------- Вебхук --------------------
+async def telegram_webhook():
+    data = request.get_json(force=True)
+    update = Update.de_json(data, application.bot)
+    await application.process_update(update)
+    return 'ok'
+
+@app.route(f'/{TOKEN}', methods=['POST'])
+async def webhook():
+    return await telegram_webhook()
+
+@app.route('/set_webhook')
+async def set_webhook_route():
+    url = request.url_root + TOKEN
+    await application.bot.set_webhook(url)
+    return f"Вебхук установлен на {url}"
+
+# -------------------- Инициализация приложения Telegram --------------------
+application = Application.builder().token(TOKEN).build()
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("find", find_command))
+application.add_handler(CommandHandler("help", lambda u,c: start(u,c)))  # /help = /start
+application.add_handler(CallbackQueryHandler(help_callback, pattern="help"))
+
+# -------------------- Запуск сервера --------------------
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
