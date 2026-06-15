@@ -218,6 +218,22 @@ async def sherlock_search(username):
     return [r for r in results if r is not None]
 
 # -------------------- РЕАЛЬНЫЙ ПРОБИВ НОМЕРА --------------------
+def extract_emails(text):
+    return re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
+
+def extract_names(text):
+    matches = re.findall(r'[А-Я][а-я]+\s[А-Я][а-я]+', text)
+    return list(set(matches))
+
+def format_block(content: str) -> str:
+    """Оборачивает содержимое в красивый блок с рамкой."""
+    lines = content.splitlines()
+    max_len = max(len(line) for line in lines) if lines else 20
+    top = "┌" + "─" * (max_len + 2) + "┐"
+    bottom = "└" + "─" * (max_len + 2) + "┘"
+    formatted = [f"│ {line.ljust(max_len)} │" for line in lines]
+    return "<pre>" + "\n".join([top] + formatted + [bottom]) + "</pre>"
+
 async def phone_lookup(phone: str) -> str:
     parts = []
     if NUMVERIFY_API_KEY:
@@ -228,13 +244,14 @@ async def phone_lookup(phone: str) -> str:
                     if resp.status == 200:
                         data = await resp.json()
                         if data.get("valid"):
-                            parts.append(
-                                f"📱 <b>Информация по номеру:</b> {phone}\n"
+                            block = (
+                                f"📱 Информация по номеру: {phone}\n"
                                 f"├ Оператор: {data.get('carrier', 'неизвестно')}\n"
                                 f"├ Регион: {data.get('location', 'неизвестно')}\n"
                                 f"├ Страна: {data.get('country_name', 'неизвестно')}\n"
                                 f"└ Тип линии: {data.get('line_type', 'неизвестно')}"
                             )
+                            parts.append(format_block(block))
                         else:
                             parts.append(f"⚠️ Номер {phone} недействителен или не найден через numverify.")
                     else:
@@ -242,7 +259,10 @@ async def phone_lookup(phone: str) -> str:
         except Exception as e:
             parts.append(f"⚠️ Сбой numverify: {e}")
     else:
-        parts.append("ℹ️ Ключ numverify не задан. Добавьте NUMVERIFY_API_KEY в Render.")
+        parts.append("ℹ️ Ключ numverify не задан.")
+
+    emails_found = set()
+    names_found = set()
 
     if GOOGLE_API_KEY and GOOGLE_CX:
         query = f'"{phone}"'
@@ -255,13 +275,16 @@ async def phone_lookup(phone: str) -> str:
                         data = await resp.json()
                         items = data.get("items", [])
                         if items:
-                            found = []
+                            found_lines = []
                             for item in items:
                                 title = item.get("title", "")
                                 link = item.get("link", "")
-                                snippet = item.get("snippet", "")[:120]
-                                found.append(f"🔗 <a href='{link}'>{title}</a>\n   <i>{snippet}...</i>")
-                            parts.append("🔍 <b>Найдено в открытых источниках:</b>\n" + "\n".join(found))
+                                snippet = item.get("snippet", "")
+                                full_text = title + " " + snippet
+                                emails_found.update(extract_emails(full_text))
+                                names_found.update(extract_names(full_text))
+                                found_lines.append(f"🔗 {title}\n   {snippet[:100]}...")
+                            parts.append(format_block("🔍 Найдено в открытых источниках:\n" + "\n".join(found_lines)))
                         else:
                             parts.append("🔍 Поиск Google не дал результатов.")
                     else:
@@ -269,30 +292,37 @@ async def phone_lookup(phone: str) -> str:
         except Exception as e:
             parts.append(f"⚠️ Сбой Google поиска: {e}")
     else:
-        parts.append("ℹ️ Ключи Google API не заданы. Добавьте GOOGLE_API_KEY и GOOGLE_CX.")
+        parts.append("ℹ️ Ключи Google API не заданы.")
 
-    return "\n\n".join(parts)
+    if emails_found:
+        parts.append(format_block("📧 Найденные email: " + ", ".join(emails_found)))
+    if names_found:
+        parts.append(format_block("👤 Возможные имена: " + ", ".join(names_found)))
+
+    return "\n".join(parts)
 
 async def phone_cmd(update, context):
     if not context.args:
-        await update.message.reply_text("⚠️ Укажите номер: /phone 79991234567"); return
+        await update.message.reply_text("⚠️ Укажите номер: /phone 79991234567")
+        return
     phone = context.args[0].strip()
     if not re.match(r"^7\d{10}$", phone):
-        await update.message.reply_text("⚠️ Формат: 7XXXXXXXXXX (11 цифр)"); return
+        await update.message.reply_text("⚠️ Формат: 7XXXXXXXXXX (11 цифр)")
+        return
     msg = await update.message.reply_text("🔍 Ищем номер...")
     result = await phone_lookup(phone)
     await msg.edit_text(result, parse_mode="HTML", disable_web_page_preview=False)
 
-# -------------------- ПРОВЕРКА СОЦСЕТЕЙ И TELEGRAM --------------------
+# -------------------- ПРОВЕРКА СОЦСЕТЕЙ / TELEGRAM --------------------
 async def check_social(session, url, name):
     try:
         async with session.get(url, timeout=10) as resp:
             if resp.status == 200:
-                return f"✅ <a href='{url}'>{name}</a> — профиль существует"
+                return format_block(f"✅ {name}: профиль существует\n{url}")
             else:
-                return f"❌ {name} — профиль не найден"
+                return format_block(f"❌ {name}: профиль не найден")
     except:
-        return f"⚠️ {name} — ошибка проверки"
+        return format_block(f"⚠️ {name}: ошибка проверки")
 
 async def vk_cmd(update, context):
     if not context.args: await update.message.reply_text("⚠️ Укажите ID или username: /vk id123"); return
@@ -346,64 +376,59 @@ async def email_cmd(update, context):
                 if resp.status == 200:
                     breaches = await resp.json()
                     breach_list = "\n".join([f"• {b['Name']}" for b in breaches])
-                    text = f"📧 <b>Email {email} найден в утечках:</b>\n{breach_list}"
+                    text = format_block(f"📧 Email {email} найден в утечках:\n{breach_list}")
                 elif resp.status == 404:
-                    text = f"✅ Email {email} не найден в известных утечках."
+                    text = format_block(f"✅ Email {email} не найден в известных утечках.")
                 else:
                     text = f"⚠️ Ошибка сервиса HIBP (код {resp.status})"
     except Exception as e:
         text = f"⚠️ Не удалось проверить email: {e}"
     await update.message.reply_text(text, parse_mode="HTML")
 
-# -------------------- ЗАГЛУШКИ ДЛЯ ДОКУМЕНТОВ И ПРОЧЕГО --------------------
-async def person_cmd(update, context): await update.message.reply_text("🔍 Поиск по ФИО временно недоступен.")
-async def passport_cmd(update, context): await update.message.reply_text("📄 Проверка паспорта временно недоступна.")
-async def snils_cmd(update, context): await update.message.reply_text("📄 Проверка СНИЛС временно недоступна.")
-async def inn_cmd(update, context): await update.message.reply_text("📄 Проверка ИНН временно недоступна.")
-async def vu_cmd(update, context): await update.message.reply_text("🚗 Проверка водительских прав временно недоступна.")
-async def adr_cmd(update, context): await update.message.reply_text("🏠 Поиск по адресу временно недоступен.")
-async def vin_cmd(update, context): await update.message.reply_text("🚘 Проверка VIN временно недоступна.")
-async def photo_cmd(update, context): await update.message.reply_text("📸 Поиск по фото временно недоступен.")
+# -------------------- ЗАГЛУШКИ --------------------
+async def person_cmd(update, context): await update.message.reply_text(format_block("🔍 Поиск по ФИО временно недоступен."), parse_mode="HTML")
+async def passport_cmd(update, context): await update.message.reply_text(format_block("📄 Проверка паспорта временно недоступна."), parse_mode="HTML")
+async def snils_cmd(update, context): await update.message.reply_text(format_block("📄 Проверка СНИЛС временно недоступна."), parse_mode="HTML")
+async def inn_cmd(update, context): await update.message.reply_text(format_block("📄 Проверка ИНН временно недоступна."), parse_mode="HTML")
+async def vu_cmd(update, context): await update.message.reply_text(format_block("🚗 Проверка водительских прав временно недоступна."), parse_mode="HTML")
+async def adr_cmd(update, context): await update.message.reply_text(format_block("🏠 Поиск по адресу временно недоступен."), parse_mode="HTML")
+async def vin_cmd(update, context): await update.message.reply_text(format_block("🚘 Проверка VIN временно недоступна."), parse_mode="HTML")
+async def photo_cmd(update, context): await update.message.reply_text(format_block("📸 Поиск по фото временно недоступен."), parse_mode="HTML")
 
-# -------------------- СТАРТОВОЕ МЕНЮ (АХУЕННЫЙ ИНТЕРФЕЙС) --------------------
+# -------------------- СТАРТ --------------------
 async def start(update, context):
-    text = (
-        "⚡️ <b>FACTUM OSINT</b> ⚡️\n"
+    menu = (
+        "⚡️ FACTUM OSINT ⚡️\n"
         "🔍 Продвинутый поиск по цифровым следам\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━\n"
-        "<b>📋 Доступные команды:</b>\n\n"
-        "👤 /person — ФИО (скоро)\n"
-        "📱 /phone — детализация номера\n"
-        "📧 /email — утечки email\n"
-        "🌐 /vk, /inst, /tiktok, /ok — соцсети\n"
-        "📟 /telegram — проверка Telegram\n"
-        "📄 /passport, /snils, /inn — документы (скоро)\n"
-        "🚗 /vu, /vin — авто (скоро)\n"
-        "🏠 /adr — недвижимость (скоро)\n"
-        "📸 /photo — поиск по фото (скоро)\n"
-        "🔎 /factum — пробив ника по 355+ сайтам\n"
-        "🔑 /keys — как получить API ключи\n"
-        "━━━━━━━━━━━━━━━━━━━━━\n"
-        "ℹ️ Для телефона и email нужны бесплатные ключи."
+        "👤 /person - ФИО (скоро)\n"
+        "📱 /phone - детализация номера\n"
+        "📧 /email - утечки email\n"
+        "🌐 /vk /inst /tiktok /ok - соцсети\n"
+        "📟 /telegram - проверка Telegram\n"
+        "📄 /passport /snils /inn - документы (скоро)\n"
+        "🚗 /vu /vin - авто (скоро)\n"
+        "🏠 /adr - недвижимость (скоро)\n"
+        "📸 /photo - поиск по фото (скоро)\n"
+        "🔎 /factum - пробив ника по 355+ сайтам\n"
+        "🔑 /keys - как получить API ключи"
     )
-    await update.message.reply_text(text, parse_mode="HTML")
+    await update.message.reply_text(format_block(menu), parse_mode="HTML")
 
 async def keys_cmd(update, context):
-    text = (
-        "🔑 <b>Как получить ключи API</b>\n\n"
-        "1️⃣ <b>numverify.com</b> (оператор номера):\n"
-        "Зарегистрируйтесь → подтвердите почту → скопируйте API Access Key.\n\n"
-        "2️⃣ <b>Google Custom Search</b> (поиск упоминаний):\n"
-        "• Cloud Console → проект → включите Custom Search API → создайте API-ключ.\n"
-        "• cse.google.com → создайте поисковик (любой сайт) → возьмите Search engine ID.\n"
+    keys_text = (
+        "🔑 Как получить ключи API\n\n"
+        "1️⃣ numverify.com - оператор номера\n"
+        "2️⃣ Google Custom Search - поиск упоминаний\n"
+        "Cloud Console -> Custom Search API -> API-ключ\n"
+        "cse.google.com -> создайте поисковик -> Search engine ID\n"
         "Включите «Search the entire web».\n\n"
-        "🔧 Добавьте в Render переменные:\n"
-        "<code>NUMVERIFY_API_KEY</code>, <code>GOOGLE_API_KEY</code>, <code>GOOGLE_CX</code>.\n\n"
-        "После деплоя команды заработают."
+        "Добавьте в Render переменные:\n"
+        "NUMVERIFY_API_KEY\n"
+        "GOOGLE_API_KEY\n"
+        "GOOGLE_CX"
     )
-    await update.message.reply_text(text, parse_mode="HTML")
+    await update.message.reply_text(format_block(keys_text), parse_mode="HTML")
 
-# -------------------- ПОИСК ПО НИКУ --------------------
 async def factum_cmd(update, context):
     if not context.args:
         await update.message.reply_text("⚠️ Укажите никнейм: /factum ivanov"); return
@@ -413,15 +438,16 @@ async def factum_cmd(update, context):
     results = await sherlock_search(username)
     elapsed = round(time.time() - start_time, 2)
     if not results:
-        await msg.edit_text(f"❌ Ничего не найдено для <b>{username}</b>.\nПроверено {len(sites)} сайтов за {elapsed}с.", parse_mode="HTML")
+        await msg.edit_text(format_block(f"❌ Ничего не найдено для {username}.\nПроверено {len(sites)} сайтов за {elapsed}с."), parse_mode="HTML")
         return
     found = len(results)
-    resp = f"🎯 <b>Factum — результаты для</b> <code>{username}</code>\n📊 Найдено: {found} / {len(sites)}\n⏱ Время: {elapsed}с\n\n"
+    resp_lines = [f"🎯 Результаты для {username}", f"📊 Найдено: {found} / {len(sites)}", f"⏱ Время: {elapsed}с", ""]
     for site, url in results:
-        resp += f"✅ <a href='{url}'>{site}</a>\n"
-    if len(resp) > 4096:
+        resp_lines.append(f"✅ {site}: {url}")
+    resp = "\n".join(resp_lines)
+    if len(resp) > 4000:
         resp = resp[:4000] + "\n... (обрезано)"
-    await msg.edit_text(resp, parse_mode="HTML", disable_web_page_preview=True)
+    await msg.edit_text(format_block(resp), parse_mode="HTML", disable_web_page_preview=True)
 
 # -------------------- ЗАПУСК --------------------
 def main():
