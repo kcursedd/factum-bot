@@ -220,8 +220,6 @@ async def sherlock_search(username):
 # -------------------- РЕАЛЬНЫЙ ПРОБИВ НОМЕРА --------------------
 async def phone_lookup(phone: str) -> str:
     parts = []
-
-    # 1. numverify
     if NUMVERIFY_API_KEY:
         url = f"http://apilayer.net/api/validate?access_key={NUMVERIFY_API_KEY}&number={phone}&country_code=RU&format=1"
         try:
@@ -244,9 +242,8 @@ async def phone_lookup(phone: str) -> str:
         except Exception as e:
             parts.append(f"⚠️ Сбой numverify: {e}")
     else:
-        parts.append("ℹ️ Ключ numverify не задан. Добавь в переменные окружения NUMVERIFY_API_KEY.")
+        parts.append("ℹ️ Ключ numverify не задан. Добавьте NUMVERIFY_API_KEY в Render.")
 
-    # 2. Google Custom Search
     if GOOGLE_API_KEY and GOOGLE_CX:
         query = f'"{phone}"'
         url = "https://www.googleapis.com/customsearch/v1"
@@ -272,144 +269,132 @@ async def phone_lookup(phone: str) -> str:
         except Exception as e:
             parts.append(f"⚠️ Сбой Google поиска: {e}")
     else:
-        parts.append("ℹ️ Ключи Google API не заданы. Добавь GOOGLE_API_KEY и GOOGLE_CX.")
+        parts.append("ℹ️ Ключи Google API не заданы. Добавьте GOOGLE_API_KEY и GOOGLE_CX.")
 
     return "\n\n".join(parts)
 
-async def phone_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("⚠️ Укажи номер: /phone 79991234567")
-        return
+async def phone_cmd(update, context):
+    if not context.args: await update.message.reply_text("⚠️ Укажите номер: /phone 79991234567"); return
     phone = context.args[0].strip()
-    if not re.match(r"^7\d{10}$", phone):
-        await update.message.reply_text("⚠️ Номер должен быть в формате 7XXXXXXXXXX (11 цифр)")
-        return
-    msg = await update.message.reply_text("🔍 Ищу номер в открытых источниках...")
+    if not re.match(r"^7\d{10}$", phone): await update.message.reply_text("⚠️ Формат: 7XXXXXXXXXX (11 цифр)"); return
+    msg = await update.message.reply_text("🔍 Ищем номер...")
     result = await phone_lookup(phone)
     await msg.edit_text(result, parse_mode="HTML", disable_web_page_preview=False)
 
-# -------------------- ЭМУЛЯЦИЯ ОСТАЛЬНЫХ КОМАНД --------------------
-# (email, vk, inst, tiktok, ok, passport, snils, inn, vu, adr, vin, photo)
-# Заглушки идентичны предыдущим полным версиям
-def emulate_email(email): return f"📧 Информация по email: {email}\n├ Утечки: 2 базы\n├ Связанные номера: +79518673646\n└ Имя: Илья Фатеев"
-def emulate_vk(username): return f"🧑‍💻 ВКонтакте: {username}\n├ Профиль: https://vk.com/{username}\n├ Имя: Илья Фатеев\n├ Дата рождения: 02.10.2004\n├ Город: Воронеж"
-def emulate_inst(username): return f"📷 Instagram: @{username}\n├ Имя: Ilya Fateev\n├ Подписчики: 1 230\n└ Публикации: 45"
-def emulate_tiktok(username): return f"🎵 TikTok: @{username}\n├ Подписчики: 5 200\n└ Лайки: 12.4K"
-def emulate_ok(username): return f"👨‍🦳 Одноклассники: {username}\n├ Профиль: https://ok.ru/profile/{username}\n├ Имя: Илья Фатеев\n└ Город: Воронеж"
-def emulate_passport(passport): return f"📄 Паспорт: {passport}\n├ Выдан: ОВД г. Воронеж\n├ Дата выдачи: 12.05.2010\n├ ФИО: Фатеев Илья Алексеевич\n└ Прописка: г. Воронеж, ул. Ленина, д. 10"
-def emulate_snils(snils): return f"📄 СНИЛС: {snils}\n├ ФИО: Фатеев Илья Алексеевич\n├ Дата рождения: 02.10.2004\n└ Статус: действует"
-def emulate_inn(inn): return f"📄 ИНН: {inn}\n├ ФИО: Фатеев Илья Алексеевич\n├ Регион: Воронежская область\n└ Организации: ИП Фатеев И.А."
-def emulate_vu(vu): return f"🚗 Водительские права: {vu}\n├ ФИО: Фатеев Илья Алексеевич\n├ Дата рождения: 02.10.2004\n├ Категории: B, B1, M\n└ Выдано: ГИБДД 3604"
-def emulate_adr(adr): return f"🏠 Адрес: {adr}\n├ Кадастровый номер: 36:34:0401015:1234\n├ Площадь: 54.2 м²\n├ Собственник: Фатеев Илья Алексеевич\n└ Обременения: нет"
-def emulate_vin(vin): return f"🚘 VIN: {vin}\n├ Марка: ВАЗ 2114\n├ Год: 2010\n├ Цвет: серебристый\n├ Владелец: Фатеев Илья Алексеевич\n└ ДТП: 1 (15.07.2022)"
-def emulate_photo(): return "📸 Отправьте фото лица для поиска (функция в разработке)"
-
-async def start(update, context):
-    text = (
-        "⚡️ <b>FACTUM OSINT</b> ⚡️\n\n"
-        "🔍 Продвинутый поиск по цифровым следам\n\n"
-        "<b>📋 Доступные категории:</b>\n"
-        "▸ 👤 Личность — поиск по ФИО и дате рождения\n"
-        "▸ 📱 Телефон — детализация по номеру\n"
-        "▸ 📧 Email — утечки, связанные аккаунты\n"
-        "▸ 🚗 Транспорт — проверка авто по госномеру или VIN\n"
-        "▸ 🌐 Соцсети — пробив по ВК, Instagram, TikTok, OK\n"
-        "▸ 📟 Telegram — информация по логину или ID\n"
-        "▸ 📄 Документы — паспорт, СНИЛС, ИНН, водительские права\n"
-        "▸ 🏠 Недвижимость — поиск по адресу или кадастровому номеру\n"
-        "▸ 🏢 Юрлица — информация по ИНН/ОГРН компании\n"
-        "▸ 📸 Фото — поиск по изображению лица\n\n"
-        "<b>⚡ Команды:</b>\n"
-        "/phone 79991234567 — полная детализация номера\n"
-        "/email user@mail.ru — поиск по email\n"
-        "/vk [id или ссылка] — профиль ВКонтакте\n"
-        "/inst [username] — профиль Instagram\n"
-        "/tiktok [username] — профиль TikTok\n"
-        "/ok [id или username] — профиль Одноклассники\n"
-        "/passport 1234567890 — данные паспорта\n"
-        "/snils 12345678901 — СНИЛС\n"
-        "/inn 123456789012 — ИНН физлица\n"
-        "/vu 1234567890 — водительские права\n"
-        "/adr Город, Улица, 1 — недвижимость\n"
-        "/vin XTA211440C5106924 — проверка VIN\n"
-        "/factum никнейм — поиск по 355+ сайтам\n"
-        "/photo — поиск по фото (отправьте изображение)\n\n"
-        "🔸 <b>Примеры:</b>\n"
-        "<code>/phone 79999688666</code>\n"
-        "<code>/vk id123456789</code>\n"
-        "<code>/factum ivanov</code>\n"
-        "<code>/photo</code> (с прикреплённым фото)"
-    )
-    await update.message.reply_text(text, parse_mode="HTML")
-
-async def email_cmd(update, context):
-    if not context.args: await update.message.reply_text("⚠️ Укажите email: /email user@mail.ru"); return
-    await update.message.reply_text(emulate_email(context.args[0]), parse_mode="HTML")
+# -------------------- ПРОВЕРКА СОЦСЕТЕЙ И TELEGRAM (РЕАЛЬНАЯ) --------------------
+async def check_social(session, url, name):
+    try:
+        async with session.get(url, timeout=10) as resp:
+            if resp.status == 200:
+                return f"✅ <a href='{url}'>{name}</a> — профиль существует"
+            else:
+                return f"❌ {name} — профиль не найден"
+    except:
+        return f"⚠️ {name} — ошибка проверки"
 
 async def vk_cmd(update, context):
-    if not context.args: await update.message.reply_text("⚠️ Укажите ID или имя: /vk id123456"); return
-    await update.message.reply_text(emulate_vk(context.args[0]), parse_mode="HTML")
+    if not context.args: await update.message.reply_text("⚠️ Укажите ID или username: /vk id123"); return
+    username = context.args[0]
+    url = f"https://vk.com/{username}"
+    async with aiohttp.ClientSession(headers=HEADERS) as session:
+        result = await check_social(session, url, "ВКонтакте")
+    await update.message.reply_text(result, parse_mode="HTML", disable_web_page_preview=True)
 
 async def inst_cmd(update, context):
     if not context.args: await update.message.reply_text("⚠️ Укажите username: /inst username"); return
-    await update.message.reply_text(emulate_inst(context.args[0]), parse_mode="HTML")
+    username = context.args[0]
+    url = f"https://www.instagram.com/{username}"
+    async with aiohttp.ClientSession(headers=HEADERS) as session:
+        result = await check_social(session, url, "Instagram")
+    await update.message.reply_text(result, parse_mode="HTML", disable_web_page_preview=True)
 
 async def tiktok_cmd(update, context):
     if not context.args: await update.message.reply_text("⚠️ Укажите username: /tiktok username"); return
-    await update.message.reply_text(emulate_tiktok(context.args[0]), parse_mode="HTML")
+    username = context.args[0]
+    url = f"https://www.tiktok.com/@{username}"
+    async with aiohttp.ClientSession(headers=HEADERS) as session:
+        result = await check_social(session, url, "TikTok")
+    await update.message.reply_text(result, parse_mode="HTML", disable_web_page_preview=True)
 
 async def ok_cmd(update, context):
     if not context.args: await update.message.reply_text("⚠️ Укажите ID или username: /ok username"); return
-    await update.message.reply_text(emulate_ok(context.args[0]), parse_mode="HTML")
+    username = context.args[0]
+    url = f"https://ok.ru/{username}"
+    async with aiohttp.ClientSession(headers=HEADERS) as session:
+        result = await check_social(session, url, "Одноклассники")
+    await update.message.reply_text(result, parse_mode="HTML", disable_web_page_preview=True)
+
+async def telegram_cmd(update, context):
+    if not context.args: await update.message.reply_text("⚠️ Укажите логин (без @) или ID: /telegram username"); return
+    username = context.args[0]
+    url = f"https://t.me/{username}"
+    async with aiohttp.ClientSession(headers=HEADERS) as session:
+        result = await check_social(session, url, "Telegram")
+    await update.message.reply_text(result, parse_mode="HTML", disable_web_page_preview=True)
+
+# -------------------- ПРОВЕРКА EMAIL (HIBP) --------------------
+async def email_cmd(update, context):
+    if not context.args: await update.message.reply_text("⚠️ Укажите email: /email user@mail.ru"); return
+    email = context.args[0]
+    url = f"https://haveibeenpwned.com/api/v3/breachedaccount/{email}"
+    headers = {"User-Agent": "FactumOSINT"}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, timeout=15) as resp:
+                if resp.status == 200:
+                    breaches = await resp.json()
+                    breach_list = "\n".join([f"• {b['Name']}" for b in breaches])
+                    text = f"📧 <b>Email {email} найден в утечках:</b>\n{breach_list}"
+                elif resp.status == 404:
+                    text = f"✅ Email {email} не найден в известных утечках."
+                else:
+                    text = f"⚠️ Ошибка сервиса HIBP (код {resp.status})"
+    except Exception as e:
+        text = f"⚠️ Не удалось проверить email: {e}"
+    await update.message.reply_text(text, parse_mode="HTML")
+
+# -------------------- ЗАГЛУШКИ ДЛЯ ДОКУМЕНТОВ И ПРОЧЕГО --------------------
+async def person_cmd(update, context):
+    await update.message.reply_text("🔍 Поиск по ФИО временно недоступен. Требуется интеграция закрытых баз.")
 
 async def passport_cmd(update, context):
-    if not context.args: await update.message.reply_text("⚠️ Укажите паспорт: /passport 4510123456"); return
-    await update.message.reply_text(emulate_passport(context.args[0]), parse_mode="HTML")
+    await update.message.reply_text("📄 Проверка паспорта временно недоступна.")
 
 async def snils_cmd(update, context):
-    if not context.args: await update.message.reply_text("⚠️ Укажите СНИЛС: /snils 12345678901"); return
-    await update.message.reply_text(emulate_snils(context.args[0]), parse_mode="HTML")
+    await update.message.reply_text("📄 Проверка СНИЛС временно недоступна.")
 
 async def inn_cmd(update, context):
-    if not context.args: await update.message.reply_text("⚠️ Укажите ИНН: /inn 2540214547"); return
-    await update.message.reply_text(emulate_inn(context.args[0]), parse_mode="HTML")
+    await update.message.reply_text("📄 Проверка ИНН временно недоступна.")
 
 async def vu_cmd(update, context):
-    if not context.args: await update.message.reply_text("⚠️ Укажите номер прав: /vu 1234567890"); return
-    await update.message.reply_text(emulate_vu(context.args[0]), parse_mode="HTML")
+    await update.message.reply_text("🚗 Проверка водительских прав временно недоступна.")
 
 async def adr_cmd(update, context):
-    if not context.args: await update.message.reply_text("⚠️ Укажите адрес: /adr Воронеж, Ленина 1"); return
-    await update.message.reply_text(emulate_adr(" ".join(context.args)), parse_mode="HTML")
+    await update.message.reply_text("🏠 Поиск по адресу временно недоступен.")
 
 async def vin_cmd(update, context):
-    if not context.args: await update.message.reply_text("⚠️ Укажите VIN: /vin XTA211440C5106924"); return
-    await update.message.reply_text(emulate_vin(context.args[0]), parse_mode="HTML")
-
-async def factum_cmd(update, context):
-    if not context.args:
-        await update.message.reply_text("⚠️ Укажите никнейм: /factum ivanov"); return
-    username = context.args[0].strip()
-    msg = await update.message.reply_text(f"🔎 Ищем <b>{username}</b> по {len(sites)} сайтам...", parse_mode="HTML")
-    start_time = time.time()
-    results = await sherlock_search(username)
-    elapsed = round(time.time() - start_time, 2)
-    if not results:
-        await msg.edit_text(f"❌ Ничего не найдено для <b>{username}</b>.\nПроверено {len(sites)} сайтов за {elapsed}с.", parse_mode="HTML")
-        return
-    found = len(results)
-    resp = f"🎯 <b>Factum — результаты для</b> <code>{username}</code>\n📊 Найдено: {found} / {len(sites)}\n⏱ Время: {elapsed}с\n\n"
-    for site, url in results:
-        resp += f"✅ <a href='{url}'>{site}</a>\n"
-    if len(resp) > 4096:
-        resp = resp[:4000] + "\n... (обрезано)"
-    await msg.edit_text(resp, parse_mode="HTML", disable_web_page_preview=True)
+    await update.message.reply_text("🚘 Проверка VIN временно недоступна.")
 
 async def photo_cmd(update, context):
-    await update.message.reply_text(emulate_photo(), parse_mode="HTML")
+    await update.message.reply_text("📸 Поиск по фото временно недоступен.")
 
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📸 Фото получено! Поиск по лицу будет реализован позже.")
+# -------------------- СТАРТОВОЕ МЕНЮ --------------------
+async def start(update, context):
+    text = (
+        "⚡️ <b>FACTUM OSINT</b> ⚡️\n\n"
+        "▸ 👤 /person — ФИО (скоро)\n"
+        "▸ 📱 /phone — телефон (работает)\n"
+        "▸ 📧 /email — утечки (работает)\n"
+        "▸ 🚗 /vin, /vu — авто (скоро)\n"
+        "▸ 🌐 /vk, /inst, /tiktok, /ok — соцсети (работает)\n"
+        "▸ 📟 /telegram — Telegram (работает)\n"
+        "▸ 📄 /passport, /snils, /inn — документы (скоро)\n"
+        "▸ 🏠 /adr — недвижимость (скоро)\n"
+        "▸ 🏢 /inn (юр) — скоро\n"
+        "▸ 📸 /photo — фото (скоро)\n"
+        "▸ 🔎 /factum — поиск по 355 сайтам (работает)"
+    )
+    await update.message.reply_text(text, parse_mode="HTML")
 
 # -------------------- ЗАПУСК --------------------
 def main():
@@ -421,6 +406,8 @@ def main():
     app.add_handler(CommandHandler("inst", inst_cmd))
     app.add_handler(CommandHandler("tiktok", tiktok_cmd))
     app.add_handler(CommandHandler("ok", ok_cmd))
+    app.add_handler(CommandHandler("telegram", telegram_cmd))
+    app.add_handler(CommandHandler("person", person_cmd))
     app.add_handler(CommandHandler("passport", passport_cmd))
     app.add_handler(CommandHandler("snils", snils_cmd))
     app.add_handler(CommandHandler("inn", inn_cmd))
@@ -429,7 +416,6 @@ def main():
     app.add_handler(CommandHandler("vin", vin_cmd))
     app.add_handler(CommandHandler("factum", factum_cmd))
     app.add_handler(CommandHandler("photo", photo_cmd))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     logger.info("✅ Factum бот запущен!")
     app.run_polling()
 
