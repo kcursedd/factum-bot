@@ -222,11 +222,16 @@ def extract_emails(text):
     return re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)
 
 def extract_names(text):
+    # Ищем комбинации из двух слов с заглавной буквы (русские имена/фамилии)
     matches = re.findall(r'[А-Я][а-я]+\s[А-Я][а-я]+', text)
-    return list(set(matches))
+    # Также вытаскиваем одиночные имена (например, "Кирилл")
+    single_names = re.findall(r'(?<![А-Яа-я])[А-Я][а-я]+(?![А-Яа-я])', text)
+    # Фильтруем короткие и явно не имена
+    stop_words = {"Номер", "Телефон", "Москва", "Россия", "Продам", "Звоните"}
+    names = [n for n in single_names if len(n) > 2 and n not in stop_words]
+    return list(set(matches + names))
 
 def format_block(content: str) -> str:
-    """Оборачивает содержимое в красивый блок с рамкой."""
     lines = content.splitlines()
     max_len = max(len(line) for line in lines) if lines else 20
     top = "┌" + "─" * (max_len + 2) + "┐"
@@ -236,6 +241,7 @@ def format_block(content: str) -> str:
 
 async def phone_lookup(phone: str) -> str:
     parts = []
+    # 1. Оператор через numverify
     if NUMVERIFY_API_KEY:
         url = f"http://apilayer.net/api/validate?access_key={NUMVERIFY_API_KEY}&number={phone}&country_code=RU&format=1"
         try:
@@ -264,6 +270,7 @@ async def phone_lookup(phone: str) -> str:
     emails_found = set()
     names_found = set()
 
+    # 2. Поиск в Google
     if GOOGLE_API_KEY and GOOGLE_CX:
         query = f'"{phone}"'
         url = "https://www.googleapis.com/customsearch/v1"
@@ -297,7 +304,7 @@ async def phone_lookup(phone: str) -> str:
     if emails_found:
         parts.append(format_block("📧 Найденные email: " + ", ".join(emails_found)))
     if names_found:
-        parts.append(format_block("👤 Возможные имена: " + ", ".join(names_found)))
+        parts.append(format_block("📞 Как записан у других: " + ", ".join(names_found)))
 
     return "\n".join(parts)
 
