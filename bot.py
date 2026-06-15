@@ -1,6 +1,6 @@
 import logging, os, asyncio, aiohttp, json, time
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # ================= ВСТРОЕННАЯ БАЗА САЙТОВ (355+) =================
 SITES_JSON = r"""
@@ -196,6 +196,7 @@ logger = logging.getLogger(__name__)
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
+# -------------------- ПОИСК ПО 355+ САЙТАМ --------------------
 async def check_site(session, site_info, username):
     name = site_info["name"]
     url = site_info["url"].format(username)
@@ -213,8 +214,8 @@ async def sherlock_search(username):
         results = await asyncio.gather(*tasks)
     return [r for r in results if r is not None]
 
-# ================= ЭМУЛЯЦИЯ ДАННЫХ (заглушки) =================
-def emulate_phone_search(phone):
+# -------------------- ЭМУЛЯЦИЯ КОМАНД --------------------
+def emulate_phone(phone):
     return f"""📱 Информация по номеру: {phone}
 ├ Оператор: Т2 Мобайл
 ├ Регион: Воронежская область
@@ -226,53 +227,81 @@ def emulate_phone_search(phone):
 └ Возраст: 68
 
 🔎 Телефонные книги: PErEd0zz, Кирилл, Кирюха, Lirika
-
 🧑‍💻 Вконтакте: Павел Салманов (https://vk.com/id70568545)
 👨‍🦳 Одноклассники: илья фатеев (https://ok.ru/profile/569614147987)
 💬 Telegram: @liz1xls, @GOLOBA_B_KPOBU
 📧 E-mail: salmanov.p@mail.ru, ilya-fateev-00@mail.ru"""
 
-def emulate_email_search(email):
+def emulate_email(email):
     return f"""📧 Информация по email: {email}
 ├ Утечки: 2 базы
 ├ Связанные номера: +79518673646, +79151234567
 ├ Имя: Илья Фатеев
 └ Nickname: fateev20010"""
 
-def emulate_passport_search(passport):
+def emulate_vk(username):
+    return f"""🧑‍💻 ВКонтакте: {username}
+├ Профиль: https://vk.com/{username}
+├ Имя: Илья Фатеев
+├ Дата рождения: 02.10.2004
+├ Город: Воронеж
+├ Друзья: 42
+└ Фото: 12 альбомов"""
+
+def emulate_inst(username):
+    return f"""📷 Instagram: @{username}
+├ Имя: Ilya Fateev
+├ Подписчики: 1 230
+├ Публикации: 45
+└ Ссылка: https://instagram.com/{username}"""
+
+def emulate_tiktok(username):
+    return f"""🎵 TikTok: @{username}
+├ Подписчики: 5 200
+├ Лайки: 12.4K
+└ Ссылка: https://tiktok.com/@{username}"""
+
+def emulate_ok(username):
+    return f"""👨‍🦳 Одноклассники: {username}
+├ Профиль: https://ok.ru/profile/{username}
+├ Имя: Илья Фатеев
+├ Возраст: 19
+└ Город: Воронеж"""
+
+def emulate_passport(passport):
     return f"""📄 Паспорт: {passport}
 ├ Выдан: ОВД г. Воронеж
 ├ Дата выдачи: 12.05.2010
 ├ ФИО: Фатеев Илья Алексеевич
 └ Прописка: г. Воронеж, ул. Ленина, д. 10"""
 
-def emulate_snils_search(snils):
+def emulate_snils(snils):
     return f"""📄 СНИЛС: {snils}
 ├ ФИО: Фатеев Илья Алексеевич
 ├ Дата рождения: 02.10.2004
 └ Статус: действует"""
 
-def emulate_inn_search(inn):
+def emulate_inn(inn):
     return f"""📄 ИНН: {inn}
 ├ ФИО: Фатеев Илья Алексеевич
 ├ Регион: Воронежская область
 └ Организации: ИП Фатеев И.А."""
 
-def emulate_vu_search(vu):
+def emulate_vu(vu):
     return f"""🚗 Водительские права: {vu}
 ├ ФИО: Фатеев Илья Алексеевич
 ├ Дата рождения: 02.10.2004
 ├ Категории: B, B1, M
 └ Выдано: ГИБДД 3604"""
 
-def emulate_adr_search(adr):
+def emulate_adr(adr):
     return f"""🏠 Адрес: {adr}
 ├ Кадастровый номер: 36:34:0401015:1234
 ├ Площадь: 54.2 м²
 ├ Собственник: Фатеев Илья Алексеевич
 └ Обременения: нет"""
 
-def emulate_vin_search(vin):
+def emulate_vin(vin):
     return f"""🚘 VIN: {vin}
 ├ Марка: ВАЗ 2114
 ├ Год: 2010
@@ -280,35 +309,45 @@ def emulate_vin_search(vin):
 ├ Владелец: Фатеев Илья Алексеевич
 └ ДТП: 1 (15.07.2022)"""
 
-def emulate_photo_reply():
-    return "📸 Поиск по фото временно недоступен (заглушка)"
+def emulate_photo():
+    return "📸 Отправьте фото лица для поиска (функция в разработке)"
 
-# ================= ОБРАБОТЧИКИ КОМАНД =================
+# -------------------- ОБРАБОТЧИКИ --------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
-        "🕵️‍♂️ <b>Factum — продвинутый поиск по цифровым следам</b>\n\n"
-        "<b>📋 Категории поиска:</b>\n"
-        "▸ 👤 Личность\n"
-        "▸ 📞 Контакты\n"
-        "▸ 🚗 Транспорт\n"
-        "▸ 🌐 Социальные сети\n"
-        "▸ 📟 Telegram\n"
-        "▸ 📄 Документы\n"
-        "▸ 🔍 Онлайн‑следы\n"
-        "▸ 🏠 Недвижимость\n"
-        "▸ 🏢 Юрлица\n"
-        "▸ 📸 Фото\n\n"
-        "<b>⚡ Быстрые команды:</b>\n"
-        "/phone <номер> — поиск по телефону\n"
-        "/email <email> — поиск по почте\n"
-        "/passport <серия номер> — паспорт\n"
-        "/snils <номер> — СНИЛС\n"
-        "/inn <физ. ИНН> — ИНН физлица\n"
-        "/vu <номер прав> — водительские права\n"
-        "/adr <адрес> — недвижимость\n"
-        "/vin <VIN> — автомобиль\n"
-        "/factum <никнейм> — пробив по 355 сайтам\n"
-        "/photo — поиск по фото (отправьте изображение)"
+        "⚡️ <b>FACTUM OSINT</b> ⚡️\n\n"
+        "🔍 Продвинутый поиск по цифровым следам\n\n"
+        "<b>📋 Доступные категории:</b>\n"
+        "▸ 👤 Личность — поиск по ФИО и дате рождения\n"
+        "▸ 📱 Телефон — детализация по номеру\n"
+        "▸ 📧 Email — утечки, связанные аккаунты\n"
+        "▸ 🚗 Транспорт — проверка авто по госномеру или VIN\n"
+        "▸ 🌐 Соцсети — пробив по ВК, Instagram, TikTok, OK\n"
+        "▸ 📟 Telegram — информация по логину или ID\n"
+        "▸ 📄 Документы — паспорт, СНИЛС, ИНН, водительские права\n"
+        "▸ 🏠 Недвижимость — поиск по адресу или кадастровому номеру\n"
+        "▸ 🏢 Юрлица — информация по ИНН/ОГРН компании\n"
+        "▸ 📸 Фото — поиск по изображению лица\n\n"
+        "<b>⚡ Команды:</b>\n"
+        "/phone 79991234567 — полная детализация номера\n"
+        "/email user@mail.ru — поиск по email\n"
+        "/vk [id или ссылка] — профиль ВКонтакте\n"
+        "/inst [username] — профиль Instagram\n"
+        "/tiktok [username] — профиль TikTok\n"
+        "/ok [id или username] — профиль Одноклассники\n"
+        "/passport 1234567890 — данные паспорта\n"
+        "/snils 12345678901 — СНИЛС\n"
+        "/inn 123456789012 — ИНН физлица\n"
+        "/vu 1234567890 — водительские права\n"
+        "/adr Город, Улица, 1 — недвижимость\n"
+        "/vin XTA211440C5106924 — проверка VIN\n"
+        "/factum никнейм — поиск по 355+ сайтам\n"
+        "/photo — поиск по фото (отправьте изображение)\n\n"
+        "🔸 <b>Примеры:</b>\n"
+        "<code>/phone 79999688666</code>\n"
+        "<code>/vk id123456789</code>\n"
+        "<code>/factum ivanov</code>\n"
+        "<code>/photo</code> (с прикреплённым фото)"
     )
     await update.message.reply_text(text, parse_mode="HTML")
 
@@ -317,60 +356,88 @@ async def phone_cmd(update, context):
         await update.message.reply_text("⚠️ Укажите номер телефона: /phone 79991234567")
         return
     phone = context.args[0]
-    await update.message.reply_text(emulate_phone_search(phone), parse_mode="HTML")
+    await update.message.reply_text(emulate_phone(phone), parse_mode="HTML")
 
 async def email_cmd(update, context):
     if not context.args:
         await update.message.reply_text("⚠️ Укажите email: /email user@mail.ru")
         return
     email = context.args[0]
-    await update.message.reply_text(emulate_email_search(email), parse_mode="HTML")
+    await update.message.reply_text(emulate_email(email), parse_mode="HTML")
+
+async def vk_cmd(update, context):
+    if not context.args:
+        await update.message.reply_text("⚠️ Укажите ID или имя пользователя: /vk id123456")
+        return
+    username = context.args[0]
+    await update.message.reply_text(emulate_vk(username), parse_mode="HTML")
+
+async def inst_cmd(update, context):
+    if not context.args:
+        await update.message.reply_text("⚠️ Укажите username: /inst username")
+        return
+    username = context.args[0]
+    await update.message.reply_text(emulate_inst(username), parse_mode="HTML")
+
+async def tiktok_cmd(update, context):
+    if not context.args:
+        await update.message.reply_text("⚠️ Укажите username: /tiktok username")
+        return
+    username = context.args[0]
+    await update.message.reply_text(emulate_tiktok(username), parse_mode="HTML")
+
+async def ok_cmd(update, context):
+    if not context.args:
+        await update.message.reply_text("⚠️ Укажите ID или username: /ok username")
+        return
+    username = context.args[0]
+    await update.message.reply_text(emulate_ok(username), parse_mode="HTML")
 
 async def passport_cmd(update, context):
     if not context.args:
         await update.message.reply_text("⚠️ Укажите паспорт: /passport 4510123456")
         return
     passport = context.args[0]
-    await update.message.reply_text(emulate_passport_search(passport), parse_mode="HTML")
+    await update.message.reply_text(emulate_passport(passport), parse_mode="HTML")
 
 async def snils_cmd(update, context):
     if not context.args:
         await update.message.reply_text("⚠️ Укажите СНИЛС: /snils 12345678901")
         return
     snils = context.args[0]
-    await update.message.reply_text(emulate_snils_search(snils), parse_mode="HTML")
+    await update.message.reply_text(emulate_snils(snils), parse_mode="HTML")
 
 async def inn_cmd(update, context):
     if not context.args:
         await update.message.reply_text("⚠️ Укажите ИНН: /inn 2540214547")
         return
     inn = context.args[0]
-    await update.message.reply_text(emulate_inn_search(inn), parse_mode="HTML")
+    await update.message.reply_text(emulate_inn(inn), parse_mode="HTML")
 
 async def vu_cmd(update, context):
     if not context.args:
         await update.message.reply_text("⚠️ Укажите номер прав: /vu 1234567890")
         return
     vu = context.args[0]
-    await update.message.reply_text(emulate_vu_search(vu), parse_mode="HTML")
+    await update.message.reply_text(emulate_vu(vu), parse_mode="HTML")
 
 async def adr_cmd(update, context):
     if not context.args:
         await update.message.reply_text("⚠️ Укажите адрес: /adr Воронеж, Ленина 1")
         return
     adr = " ".join(context.args)
-    await update.message.reply_text(emulate_adr_search(adr), parse_mode="HTML")
+    await update.message.reply_text(emulate_adr(adr), parse_mode="HTML")
 
 async def vin_cmd(update, context):
     if not context.args:
         await update.message.reply_text("⚠️ Укажите VIN: /vin XTA211440C5106924")
         return
     vin = context.args[0]
-    await update.message.reply_text(emulate_vin_search(vin), parse_mode="HTML")
+    await update.message.reply_text(emulate_vin(vin), parse_mode="HTML")
 
 async def factum_cmd(update, context):
     if not context.args:
-        await update.message.reply_text("⚠️ Укажите ник: /factum target")
+        await update.message.reply_text("⚠️ Укажите никнейм: /factum ivanov")
         return
     username = context.args[0].strip()
     msg = await update.message.reply_text(f"🔎 Ищем <b>{username}</b> по {len(sites)} сайтам...", parse_mode="HTML")
@@ -389,15 +456,23 @@ async def factum_cmd(update, context):
     await msg.edit_text(resp, parse_mode="HTML", disable_web_page_preview=True)
 
 async def photo_cmd(update, context):
-    await update.message.reply_text(emulate_photo_reply(), parse_mode="HTML")
+    await update.message.reply_text(emulate_photo(), parse_mode="HTML")
 
-# ================= ЗАПУСК =================
+# Обработчик для приёма фото (заглушка)
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("📸 Фото получено! Поиск по лицу будет реализован позже.")
+
+# -------------------- ЗАПУСК --------------------
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("factum", factum_cmd))
     app.add_handler(CommandHandler("phone", phone_cmd))
     app.add_handler(CommandHandler("email", email_cmd))
+    app.add_handler(CommandHandler("vk", vk_cmd))
+    app.add_handler(CommandHandler("inst", inst_cmd))
+    app.add_handler(CommandHandler("tiktok", tiktok_cmd))
+    app.add_handler(CommandHandler("ok", ok_cmd))
     app.add_handler(CommandHandler("passport", passport_cmd))
     app.add_handler(CommandHandler("snils", snils_cmd))
     app.add_handler(CommandHandler("inn", inn_cmd))
@@ -405,6 +480,7 @@ def main():
     app.add_handler(CommandHandler("adr", adr_cmd))
     app.add_handler(CommandHandler("vin", vin_cmd))
     app.add_handler(CommandHandler("photo", photo_cmd))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     logger.info("✅ Factum бот запущен!")
     app.run_polling()
 
