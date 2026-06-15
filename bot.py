@@ -274,14 +274,16 @@ async def phone_lookup(phone: str) -> str:
     return "\n\n".join(parts)
 
 async def phone_cmd(update, context):
-    if not context.args: await update.message.reply_text("⚠️ Укажите номер: /phone 79991234567"); return
+    if not context.args:
+        await update.message.reply_text("⚠️ Укажите номер: /phone 79991234567"); return
     phone = context.args[0].strip()
-    if not re.match(r"^7\d{10}$", phone): await update.message.reply_text("⚠️ Формат: 7XXXXXXXXXX (11 цифр)"); return
+    if not re.match(r"^7\d{10}$", phone):
+        await update.message.reply_text("⚠️ Формат: 7XXXXXXXXXX (11 цифр)"); return
     msg = await update.message.reply_text("🔍 Ищем номер...")
     result = await phone_lookup(phone)
     await msg.edit_text(result, parse_mode="HTML", disable_web_page_preview=False)
 
-# -------------------- ПРОВЕРКА СОЦСЕТЕЙ И TELEGRAM (РЕАЛЬНАЯ) --------------------
+# -------------------- ПРОВЕРКА СОЦСЕТЕЙ И TELEGRAM --------------------
 async def check_social(session, url, name):
     try:
         async with session.get(url, timeout=10) as resp:
@@ -354,52 +356,78 @@ async def email_cmd(update, context):
     await update.message.reply_text(text, parse_mode="HTML")
 
 # -------------------- ЗАГЛУШКИ ДЛЯ ДОКУМЕНТОВ И ПРОЧЕГО --------------------
-async def person_cmd(update, context):
-    await update.message.reply_text("🔍 Поиск по ФИО временно недоступен. Требуется интеграция закрытых баз.")
+async def person_cmd(update, context): await update.message.reply_text("🔍 Поиск по ФИО временно недоступен.")
+async def passport_cmd(update, context): await update.message.reply_text("📄 Проверка паспорта временно недоступна.")
+async def snils_cmd(update, context): await update.message.reply_text("📄 Проверка СНИЛС временно недоступна.")
+async def inn_cmd(update, context): await update.message.reply_text("📄 Проверка ИНН временно недоступна.")
+async def vu_cmd(update, context): await update.message.reply_text("🚗 Проверка водительских прав временно недоступна.")
+async def adr_cmd(update, context): await update.message.reply_text("🏠 Поиск по адресу временно недоступен.")
+async def vin_cmd(update, context): await update.message.reply_text("🚘 Проверка VIN временно недоступна.")
+async def photo_cmd(update, context): await update.message.reply_text("📸 Поиск по фото временно недоступен.")
 
-async def passport_cmd(update, context):
-    await update.message.reply_text("📄 Проверка паспорта временно недоступна.")
-
-async def snils_cmd(update, context):
-    await update.message.reply_text("📄 Проверка СНИЛС временно недоступна.")
-
-async def inn_cmd(update, context):
-    await update.message.reply_text("📄 Проверка ИНН временно недоступна.")
-
-async def vu_cmd(update, context):
-    await update.message.reply_text("🚗 Проверка водительских прав временно недоступна.")
-
-async def adr_cmd(update, context):
-    await update.message.reply_text("🏠 Поиск по адресу временно недоступен.")
-
-async def vin_cmd(update, context):
-    await update.message.reply_text("🚘 Проверка VIN временно недоступна.")
-
-async def photo_cmd(update, context):
-    await update.message.reply_text("📸 Поиск по фото временно недоступен.")
-
-# -------------------- СТАРТОВОЕ МЕНЮ --------------------
+# -------------------- СТАРТОВОЕ МЕНЮ (АХУЕННЫЙ ИНТЕРФЕЙС) --------------------
 async def start(update, context):
     text = (
-        "⚡️ <b>FACTUM OSINT</b> ⚡️\n\n"
-        "▸ 👤 /person — ФИО (скоро)\n"
-        "▸ 📱 /phone — телефон (работает)\n"
-        "▸ 📧 /email — утечки (работает)\n"
-        "▸ 🚗 /vin, /vu — авто (скоро)\n"
-        "▸ 🌐 /vk, /inst, /tiktok, /ok — соцсети (работает)\n"
-        "▸ 📟 /telegram — Telegram (работает)\n"
-        "▸ 📄 /passport, /snils, /inn — документы (скоро)\n"
-        "▸ 🏠 /adr — недвижимость (скоро)\n"
-        "▸ 🏢 /inn (юр) — скоро\n"
-        "▸ 📸 /photo — фото (скоро)\n"
-        "▸ 🔎 /factum — поиск по 355 сайтам (работает)"
+        "⚡️ <b>FACTUM OSINT</b> ⚡️\n"
+        "🔍 Продвинутый поиск по цифровым следам\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "<b>📋 Доступные команды:</b>\n\n"
+        "👤 /person — ФИО (скоро)\n"
+        "📱 /phone — детализация номера\n"
+        "📧 /email — утечки email\n"
+        "🌐 /vk, /inst, /tiktok, /ok — соцсети\n"
+        "📟 /telegram — проверка Telegram\n"
+        "📄 /passport, /snils, /inn — документы (скоро)\n"
+        "🚗 /vu, /vin — авто (скоро)\n"
+        "🏠 /adr — недвижимость (скоро)\n"
+        "📸 /photo — поиск по фото (скоро)\n"
+        "🔎 /factum — пробив ника по 355+ сайтам\n"
+        "🔑 /keys — как получить API ключи\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "ℹ️ Для телефона и email нужны бесплатные ключи."
     )
     await update.message.reply_text(text, parse_mode="HTML")
+
+async def keys_cmd(update, context):
+    text = (
+        "🔑 <b>Как получить ключи API</b>\n\n"
+        "1️⃣ <b>numverify.com</b> (оператор номера):\n"
+        "Зарегистрируйтесь → подтвердите почту → скопируйте API Access Key.\n\n"
+        "2️⃣ <b>Google Custom Search</b> (поиск упоминаний):\n"
+        "• Cloud Console → проект → включите Custom Search API → создайте API-ключ.\n"
+        "• cse.google.com → создайте поисковик (любой сайт) → возьмите Search engine ID.\n"
+        "Включите «Search the entire web».\n\n"
+        "🔧 Добавьте в Render переменные:\n"
+        "<code>NUMVERIFY_API_KEY</code>, <code>GOOGLE_API_KEY</code>, <code>GOOGLE_CX</code>.\n\n"
+        "После деплоя команды заработают."
+    )
+    await update.message.reply_text(text, parse_mode="HTML")
+
+# -------------------- ПОИСК ПО НИКУ --------------------
+async def factum_cmd(update, context):
+    if not context.args:
+        await update.message.reply_text("⚠️ Укажите никнейм: /factum ivanov"); return
+    username = context.args[0].strip()
+    msg = await update.message.reply_text(f"🔎 Ищем <b>{username}</b> по {len(sites)} сайтам...", parse_mode="HTML")
+    start_time = time.time()
+    results = await sherlock_search(username)
+    elapsed = round(time.time() - start_time, 2)
+    if not results:
+        await msg.edit_text(f"❌ Ничего не найдено для <b>{username}</b>.\nПроверено {len(sites)} сайтов за {elapsed}с.", parse_mode="HTML")
+        return
+    found = len(results)
+    resp = f"🎯 <b>Factum — результаты для</b> <code>{username}</code>\n📊 Найдено: {found} / {len(sites)}\n⏱ Время: {elapsed}с\n\n"
+    for site, url in results:
+        resp += f"✅ <a href='{url}'>{site}</a>\n"
+    if len(resp) > 4096:
+        resp = resp[:4000] + "\n... (обрезано)"
+    await msg.edit_text(resp, parse_mode="HTML", disable_web_page_preview=True)
 
 # -------------------- ЗАПУСК --------------------
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("keys", keys_cmd))
     app.add_handler(CommandHandler("phone", phone_cmd))
     app.add_handler(CommandHandler("email", email_cmd))
     app.add_handler(CommandHandler("vk", vk_cmd))
@@ -416,6 +444,7 @@ def main():
     app.add_handler(CommandHandler("vin", vin_cmd))
     app.add_handler(CommandHandler("factum", factum_cmd))
     app.add_handler(CommandHandler("photo", photo_cmd))
+    app.add_handler(MessageHandler(filters.PHOTO, photo_cmd))
     logger.info("✅ Factum бот запущен!")
     app.run_polling()
 
