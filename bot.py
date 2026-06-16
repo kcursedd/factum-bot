@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 API_TOKEN = os.getenv('TELEGRAM_TOKEN')
-WHITELIST = [987654321]  # ← ЗАМЕНИ НА СВОЙ TELEGRAM ID
+WHITELIST = [8273442593]  # ← ЗАМЕНИ НА СВОЙ TELEGRAM ID
 
 DB_PATH = 'factum.db'
 
