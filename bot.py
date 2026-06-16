@@ -1,9 +1,12 @@
-import os, logging, sqlite3, requests
-from aiogram import Bot, Dispatcher, types
-from aiogram.utils import executor
+import os
+import logging
+import sqlite3
+import requests
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from datetime import datetime
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
@@ -93,36 +96,16 @@ SITES = {
     "Note":"https://note.com/{}","FC2":"https://fc2.com/{}",
     "Hatena":"https://profile.hatena.ne.jp/{}/","OK.ru":"https://ok.ru/{}",
     "Mail.ru":"https://my.mail.ru/{}","VK Play":"https://vkplay.ru/{}",
-    "Yappy":"https://yappy.media/profile/{}","RUTUBE":"https://rutube.ru/channel/{}/",
-    "NUUM":"https://nuum.ru/{}","VK Video":"https://vk.com/video/@{}",
-    "TenChat":"https://tenchat.ru/{}","PressPal":"https://presspal.ru/{}",
-    "Mave":"https://mave.digital/@{}","Sponsr":"https://sponsr.ru/{}",
-    "Teletype":"https://teletype.in/@{}","Whales":"https://whales.ru/{}",
-    "TJournal":"https://tjournal.ru/u/{}","DTF":"https://dtf.ru/u/{}",
-    "Coub":"https://coub.com/{}","Figma":"https://www.figma.com/@{}",
-    "Notion":"https://{}.notion.site/{}","Trello":"https://trello.com/{}",
-    "Asana":"https://app.asana.com/user/{}","Slack":"https://{}.slack.com/",
-    "DiscordServers":"https://discord.com/servers/{}","TelegramChannel":"https://t.me/{}",
-    "TwitchPlays":"https://www.twitch.tv/{}","YouTubeGaming":"https://www.youtube.com/@{}",
-    "FacebookGaming":"https://fb.gg/{}","TrovoLive":"https://trovo.live/{}",
-    "Nonolive":"https://www.nonolive.com/{}","BigoLive":"https://www.bigo.tv/user/{}",
-    "Uplive":"https://uplive.tv/{}","LiveMe":"https://www.liveme.com/{}",
-    "YouNow":"https://www.younow.com/{}","IRL":"https://irl.tv/{}",
-    "Periscope":"https://www.periscope.tv/{}","Houseparty":"https://houseparty.com/{}",
-    "Clubhouse":"https://www.clubhouse.com/@{}","SpatialChat":"https://spatial.chat/{}",
-    "Gather":"https://gather.town/{}","RocketChat":"https://rocket.chat/{}",
-    "Mattermost":"https://mattermost.com/{}","Element":"https://element.io/{}",
-    "Wire":"https://wire.com/{}","Threema":"https://threema.ch/{}",
-    "Session":"https://getsession.org/{}","Status":"https://status.im/{}",
-    "Medium":"https://medium.com/@{}","Ghost":"https://{}.ghost.io/",
-    "Write.as":"https://write.as/{}","Telegraph":"https://telegra.ph/{}",
-    "Mirror":"https://mirror.xyz/{}","HackMD":"https://hackmd.io/@{}",
-    "Obsidian":"https://obsidian.md/{}","Roam":"https://roamresearch.com/{}",
-    "Logseq":"https://logseq.com/{}","RemNote":"https://www.remnote.com/{}",
-    "Anki":"https://ankiweb.net/{}","Quizlet":"https://quizlet.com/{}",
+    "Yappy":"https://yappy.media/profile/{}","NUUM":"https://nuum.ru/{}",
+    "VK Video":"https://vk.com/video/@{}","TenChat":"https://tenchat.ru/{}",
+    "PressPal":"https://presspal.ru/{}","Mave":"https://mave.digital/@{}",
+    "Sponsr":"https://sponsr.ru/{}","Teletype":"https://teletype.in/@{}",
+    "Whales":"https://whales.ru/{}","TJournal":"https://tjournal.ru/u/{}",
+    "DTF":"https://dtf.ru/u/{}","Coub":"https://coub.com/{}",
+    "Figma":"https://www.figma.com/@{}","Notion":"https://{}.notion.site/{}",
+    "Trello":"https://trello.com/{}","Slack":"https://{}.slack.com/",
     "Coursera":"https://www.coursera.org/user/{}","Udemy":"https://www.udemy.com/user/{}",
-    "Skillshare":"https://www.skillshare.com/user/{}","edX":"https://edx.org/{}",
-    "Duolingo":"https://www.duolingo.com/profile/{}","Memrise":"https://www.memrise.com/user/{}",
+    "Skillshare":"https://www.skillshare.com/user/{}","Duolingo":"https://www.duolingo.com/profile/{}",
     "ResearchGate":"https://www.researchgate.net/profile/{}","Academia":"https://academia.edu/{}",
     "GoogleScholar":"https://scholar.google.com/citations?user={}","ORCID":"https://orcid.org/{}",
     "Publons":"https://publons.com/{}","Scopus":"https://www.scopus.com/authid/{}",
@@ -142,18 +125,23 @@ def search_username(username):
                     r2 = requests.get(url, headers=headers, timeout=5)
                     if r2.status_code in [200,403] and len(r2.text) > 100:
                         results.append({'platform':platform,'url':url})
-                except: pass
-        except: pass
+                except:
+                    pass
+        except:
+            pass
     return sorted(results, key=lambda x: x['platform'])
 
 def search_leaks(query):
     results = []
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT * FROM leaks WHERE email LIKE ? OR username LIKE ? OR phone LIKE ?",(f'%{query}%',)*3)
-    for row in c.fetchall():
-        results.append({'source':row[5],'email':row[1],'username':row[2],'password':row[3],'phone':row[4]})
-    conn.close()
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT * FROM leaks WHERE email LIKE ? OR username LIKE ? OR phone LIKE ?",(f'%{query}%',)*3)
+        for row in c.fetchall():
+            results.append({'source':row[5],'email':row[1],'username':row[2],'password':row[3],'phone':row[4]})
+        conn.close()
+    except:
+        pass
     if '@' in query:
         try:
             r = requests.get(f"https://haveibeenpwned.com/api/v3/breachedaccount/{query}",
@@ -161,7 +149,8 @@ def search_leaks(query):
             if r.status_code == 200:
                 for b in r.json():
                     results.append({'source':f"HIBP:{b['Name']}",'email':query,'username':'','password':'','phone':b.get('Description','')[:100]})
-        except: pass
+        except:
+            pass
     return results
 
 def get_operator(phone):
@@ -181,12 +170,8 @@ def op_emoji(op):
     if 'tele2' in op: return '⚫'
     return '🏢'
 
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(bot)
-
-@dp.message_handler(commands=['start'])
-async def start(msg: types.Message):
-    await msg.answer(
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
         "<b>🕵️ FACTUM-OSINT</b>\n\n"
         "<b>Что умеет бот:</b>\n"
         "• <b>Поиск по никнейму</b> — проверка на 355+ сайтах\n"
@@ -198,44 +183,57 @@ async def start(msg: types.Message):
         "📞 Отправь номер: <code>+79991234567</code>\n\n"
         "<b>Команды:</b>\n"
         "<code>/add email:pass</code> — добавить в базу\n"
-        "<code>/search запрос</code> — поиск по базе", parse_mode='HTML')
+        "<code>/search запрос</code> — поиск по базе",
+        parse_mode='HTML'
+    )
 
-@dp.message_handler(commands=['add'])
-async def add(msg: types.Message):
-    t = msg.text.replace('/add','').strip()
+async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    t = update.message.text.replace('/add','').strip()
     if ':' not in t:
-        await msg.answer("❌ Формат: <code>/add email:password</code>", parse_mode='HTML'); return
+        await update.message.reply_text("❌ Формат: <code>/add email:password</code>", parse_mode='HTML')
+        return
     e,p = t.split(':',1)
     e,p = e.strip(),p.strip()
-    conn = sqlite3.connect(DB_PATH); c = conn.cursor()
-    c.execute("INSERT INTO leaks(email,password,source) VALUES (?,?,'user')",(e,p))
-    conn.commit(); conn.close()
-    await msg.answer(f"✅ Добавлено:\n📧 <code>{e}</code>\n🔑 <code>{p}</code>", parse_mode='HTML')
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("INSERT INTO leaks(email,password,source) VALUES (?,?,'user')",(e,p))
+        conn.commit()
+        conn.close()
+        await update.message.reply_text(f"✅ Добавлено:\n📧 <code>{e}</code>\n🔑 <code>{p}</code>", parse_mode='HTML')
+    except Exception as ex:
+        await update.message.reply_text(f"❌ Ошибка: {ex}")
 
-@dp.message_handler(commands=['search'])
-async def search(msg: types.Message):
-    q = msg.text.replace('/search','').strip()
-    conn = sqlite3.connect(DB_PATH); c = conn.cursor()
-    c.execute("SELECT * FROM leaks WHERE email LIKE ? OR username LIKE ? OR phone LIKE ?",(f'%{q}%',)*3)
-    rows = c.fetchall(); conn.close()
-    if not rows:
-        await msg.answer("❌ Ничего не найдено в локальной базе."); return
-    r = "<b>🔐 НАЙДЕНО В БАЗЕ:</b>\n\n"
-    for row in rows[:30]:
-        r += f"📧 <code>{row[1]}</code>\n"
-        if row[3]: r += f"🔑 <code>{row[3]}</code>\n"
-        if row[4]: r += f"📞 {row[4]}\n"
-        r += f"📂 {row[5]}\n\n"
-    await msg.answer(r, parse_mode='HTML')
+async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.message.text.replace('/search','').strip()
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT * FROM leaks WHERE email LIKE ? OR username LIKE ? OR phone LIKE ?",(f'%{q}%',)*3)
+        rows = c.fetchall()
+        conn.close()
+        if not rows:
+            await update.message.reply_text("❌ Ничего не найдено в локальной базе.")
+            return
+        r = "<b>🔐 НАЙДЕНО В БАЗЕ:</b>\n\n"
+        for row in rows[:30]:
+            r += f"📧 <code>{row[1]}</code>\n"
+            if row[3]: r += f"🔑 <code>{row[3]}</code>\n"
+            if row[4]: r += f"📞 {row[4]}\n"
+            r += f"📂 {row[5]}\n\n"
+        await update.message.reply_text(r, parse_mode='HTML')
+    except Exception as ex:
+        await update.message.reply_text(f"❌ Ошибка: {ex}")
 
-@dp.message_handler()
-async def handle(msg: types.Message):
-    q = msg.text.strip()
-    w = await msg.answer("🔍 <b>Выполняю поиск...</b>", parse_mode='HTML')
+async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.message.text.strip()
+    w = await update.message.reply_text("🔍 <b>Выполняю поиск...</b>", parse_mode='HTML')
     try:
         if '@' in q and '.' in q.split('@')[-1]:
-            email = q; uname = email.split('@')[0]
-            leaks = search_leaks(email); soc = search_username(uname)
+            email = q
+            uname = email.split('@')[0]
+            leaks = search_leaks(email)
+            soc = search_username(uname)
             await w.delete()
             r = f"<b>╔══════════════════════════╗</b>\n<b>║     📧 ПРОБИВ ПО EMAIL     ║</b>\n<b>╚══════════════════════════╝</b>\n\n📧 <b>Email:</b> <code>{email}</code>\n👤 <b>Никнейм:</b> <code>{uname}</code>\n\n<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n<b>🔐 НАЙДЕНО В УТЕЧКАХ</b>\n<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
             if leaks:
@@ -245,16 +243,22 @@ async def handle(msg: types.Message):
                     if l['phone']: r += f"📞 Телефон: {l['phone']}\n"
                     if l['username']: r += f"👤 Логин: {l['username']}\n"
                     r += "\n"
-            else: r += "❌ В открытых базах не найдено\n\n"
+            else:
+                r += "❌ В открытых базах не найдено\n\n"
             r += f"<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n<b>🌐 НАЙДЕНО НА САЙТАХ</b>\n<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n✅ Найдено профилей: <b>{len(soc)}</b>\n\n"
             if soc:
-                for s in soc[:50]: r += f"✅ <b>{s['platform']}</b>\n   🔗 {s['url']}\n"
-            else: r += "❌ Профили не найдены\n"
+                for s in soc[:50]:
+                    r += f"✅ <b>{s['platform']}</b>\n   🔗 {s['url']}\n"
+            else:
+                r += "❌ Профили не найдены\n"
             r += f"\n<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n🕵️ <b>Factum-osint</b> | {datetime.now().strftime('%d.%m.%Y %H:%M')}\n<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>"
-            for i in range(0, len(r), 4000): await msg.answer(r[i:i+4000], parse_mode='HTML', disable_web_page_preview=True)
+            for i in range(0, len(r), 4000):
+                await update.message.reply_text(r[i:i+4000], parse_mode='HTML', disable_web_page_preview=True)
 
         elif q.startswith('+') or q.startswith('8') or (len(''.join(filter(str.isdigit,q))) >= 10):
-            d = ''.join(filter(str.isdigit,q)); ph = fmt_phone(d); op = get_operator(d)
+            d = ''.join(filter(str.isdigit,q))
+            ph = fmt_phone(d)
+            op = get_operator(d)
             leaks = search_leaks(d)
             await w.delete()
             r = f"<b>╔══════════════════════════╗</b>\n<b>║    📞 ПРОБИВ ПО НОМЕРУ     ║</b>\n<b>╚══════════════════════════╝</b>\n\n{op_emoji(op)} <b>Номер:</b> <code>{ph}</code>\n📡 <b>Оператор:</b> {op}\n📶 <b>Страна:</b> Россия\n\n<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n<b>🔐 НАЙДЕНО В УТЕЧКАХ</b>\n<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
@@ -265,18 +269,22 @@ async def handle(msg: types.Message):
                     if l['password']: r += f"🔑 Пароль: <code>{l['password']}</code>\n"
                     if l['username']: r += f"👤 Логин: {l['username']}\n"
                     r += "\n"
-            else: r += "❌ В локальной базе не найдено\n💡 <i>Добавь данные через /add email:pass</i>\n\n"
+            else:
+                r += "❌ В локальной базе не найдено\n💡 <i>Добавь данные через /add email:pass</i>\n\n"
             r += f"<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n🕵️ <b>Factum-osint</b> | {datetime.now().strftime('%d.%m.%Y %H:%M')}\n<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>"
-            await msg.answer(r, parse_mode='HTML')
+            await update.message.reply_text(r, parse_mode='HTML')
 
         else:
             uname = q.replace('@','').strip().lower()
-            soc = search_username(uname); leaks = search_leaks(uname)
+            soc = search_username(uname)
+            leaks = search_leaks(uname)
             await w.delete()
             r = f"<b>╔══════════════════════════╗</b>\n<b>║   👤 ПРОБИВ ПО НИКНЕЙМУ    ║</b>\n<b>╚══════════════════════════╝</b>\n\n👤 <b>Никнейм:</b> <code>{uname}</code>\n📊 <b>Найдено:</b> {len(soc)} из {len(SITES)} сайтов\n\n<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n<b>✅ НАЙДЕННЫЕ АККАУНТЫ</b>\n<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
             if soc:
-                for s in soc[:80]: r += f"✅ <b>{s['platform']}</b>\n   🔗 {s['url']}\n"
-            else: r += "❌ Аккаунты не найдены\n"
+                for s in soc[:80]:
+                    r += f"✅ <b>{s['platform']}</b>\n   🔗 {s['url']}\n"
+            else:
+                r += "❌ Аккаунты не найдены\n"
             if leaks:
                 r += f"\n<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n<b>🔐 НАЙДЕНО В УТЕЧКАХ</b>\n<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n"
                 for l in leaks[:10]:
@@ -285,10 +293,23 @@ async def handle(msg: types.Message):
                     if l['password']: r += f"🔑 <code>{l['password']}</code>\n"
                     r += "\n"
             r += f"<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n🕵️ <b>Factum-osint</b> | {datetime.now().strftime('%d.%m.%Y %H:%M')}\n<b>━━━━━━━━━━━━━━━━━━━━━━━━━━</b>"
-            for i in range(0, len(r), 4000): await msg.answer(r[i:i+4000], parse_mode='HTML', disable_web_page_preview=True)
+            for i in range(0, len(r), 4000):
+                await update.message.reply_text(r[i:i+4000], parse_mode='HTML', disable_web_page_preview=True)
     except Exception as e:
-        await w.delete(); await msg.answer(f"❌ Ошибка: {e}")
+        try:
+            await w.delete()
+        except:
+            pass
+        await update.message.reply_text(f"❌ Ошибка: {e}")
+
+def main():
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler('start', start))
+    app.add_handler(CommandHandler('add', add))
+    app.add_handler(CommandHandler('search', search))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
+    logger.info("Factum-osint запущен")
+    app.run_polling()
 
 if __name__ == '__main__':
-    logger.info("Factum-osint запущен")
-    executor.start_polling(dp, skip_updates=True)
+    main()
