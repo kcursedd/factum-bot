@@ -1,7 +1,4 @@
-import os
-import logging
-import sqlite3
-import requests
+import os, logging, sqlite3, requests
 from aiogram import Bot, Dispatcher, types
 from aiogram.utils import executor
 from datetime import datetime
@@ -10,10 +7,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-WHITELIST = [int(x.strip()) for x in os.getenv('WHITELIST', '').split(',') if x.strip()]
 DB_PATH = 'factum.db'
 
-# База
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -24,51 +19,118 @@ def init_db():
 
 init_db()
 
-# 300+ сайтов
 SITES = {
     "Instagram":"https://www.instagram.com/{}","VK":"https://vk.com/{}","Facebook":"https://www.facebook.com/{}",
     "X/Twitter":"https://x.com/{}","TikTok":"https://www.tiktok.com/@{}","Snapchat":"https://www.snapchat.com/add/{}",
     "Telegram":"https://t.me/{}","WhatsApp":"https://wa.me/{}","Discord":"https://discord.com/users/{}",
     "Reddit":"https://www.reddit.com/user/{}","Pinterest":"https://www.pinterest.com/{}","Tumblr":"https://{}.tumblr.com/",
     "Flickr":"https://www.flickr.com/people/{}","Imgur":"https://imgur.com/user/{}","Threads":"https://www.threads.net/@{}",
-    "Mastodon":"https://mastodon.social/@{}","LinkedIn":"https://www.linkedin.com/in/{}","GitHub":"https://github.com/{}",
-    "GitLab":"https://gitlab.com/{}","BitBucket":"https://bitbucket.org/{}/","StackOverflow":"https://stackoverflow.com/users/{}",
+    "Mastodon":"https://mastodon.social/@{}","Bluesky":"https://bsky.app/profile/{}","Signal":"https://signal.me/#u/{}",
+    "Viber":"viber://chat?number={}","WeChat":"https://weixin.qq.com/{}","LINE":"https://line.me/{}",
+    "KakaoTalk":"https://kakao.com/{}","Skype":"https://skype.com/{}",
+    "LinkedIn":"https://www.linkedin.com/in/{}","GitHub":"https://github.com/{}","GitLab":"https://gitlab.com/{}",
+    "BitBucket":"https://bitbucket.org/{}/","StackOverflow":"https://stackoverflow.com/users/{}",
     "Habr":"https://habr.com/ru/users/{}","Dev.to":"https://dev.to/{}","Hashnode":"https://hashnode.com/@{}",
     "Medium":"https://medium.com/@{}","Substack":"https://{}.substack.com/","ProductHunt":"https://www.producthunt.com/@{}",
-    "Freelancer":"https://www.freelancer.com/u/{}","Upwork":"https://www.upwork.com/freelancers/{}",
-    "Fiverr":"https://www.fiverr.com/{}","Kwork":"https://kwork.ru/user/{}","Behance":"https://www.behance.net/{}",
-    "Dribbble":"https://dribbble.com/{}","Codecademy":"https://www.codecademy.com/profiles/{}",
-    "Kaggle":"https://www.kaggle.com/{}","LeetCode":"https://leetcode.com/{}","HackerRank":"https://www.hackerrank.com/{}",
-    "Codewars":"https://www.codewars.com/users/{}","Replit":"https://replit.com/@{}","CodePen":"https://codepen.io/{}",
-    "PyPI":"https://pypi.org/user/{}","NPM":"https://www.npmjs.com/~{}","DockerHub":"https://hub.docker.com/u/{}",
-    "YouTube":"https://www.youtube.com/@{}","Twitch":"https://www.twitch.tv/{}","Vimeo":"https://vimeo.com/{}",
-    "Dailymotion":"https://www.dailymotion.com/{}","Rutube":"https://rutube.ru/channel/{}/","Kick":"https://kick.com/{}",
-    "Trovo":"https://trovo.live/{}","Spotify":"https://open.spotify.com/user/{}","SoundCloud":"https://soundcloud.com/{}",
-    "Bandcamp":"https://{}.bandcamp.com/","Last.fm":"https://www.last.fm/user/{}","Mixcloud":"https://www.mixcloud.com/{}",
-    "Steam":"https://steamcommunity.com/id/{}","Roblox":"https://www.roblox.com/user.aspx?username={}",
-    "Chess.com":"https://www.chess.com/member/{}","Lichess":"https://lichess.org/@/{}",
-    "Avito":"https://www.avito.ru/user/{}","Youla":"https://youla.ru/user/{}","Ozon":"https://www.ozon.ru/seller/{}/",
-    "Wildberries":"https://www.wildberries.ru/seller/{}","AliExpress":"https://aliexpress.ru/store/{}",
-    "Etsy":"https://www.etsy.com/people/{}","eBay":"https://www.ebay.com/usr/{}","Amazon":"https://www.amazon.com/gp/profile/{}",
-    "Patreon":"https://www.patreon.com/{}","Boosty":"https://boosty.to/{}","BuyMeACoffee":"https://www.buymeacoffee.com/{}",
-    "Gumroad":"https://{}.gumroad.com/","Pikabu":"https://pikabu.ru/@{}","LiveJournal":"https://{}.livejournal.com/",
-    "Dzen":"https://dzen.ru/{}","2GIS":"https://2gis.ru/user/{}","Profi.ru":"https://profi.ru/profile/{}",
-    "YouDo":"https://youdo.com/user/{}","Avto.ru":"https://auto.ru/user/{}","Cian":"https://www.cian.ru/user/{}",
-    "Tinder":"https://tinder.com/@{}","Badoo":"https://badoo.com/profile/{}","Mamba":"https://www.mamba.ru/profile/{}",
+    "AngelList":"https://angel.co/u/{}","Freelancer":"https://www.freelancer.com/u/{}",
+    "Upwork":"https://www.upwork.com/freelancers/{}","Fiverr":"https://www.fiverr.com/{}",
+    "Kwork":"https://kwork.ru/user/{}","Behance":"https://www.behance.net/{}","Dribbble":"https://dribbble.com/{}",
+    "Coroflot":"https://www.coroflot.com/{}","Codecademy":"https://www.codecademy.com/profiles/{}",
+    "Kaggle":"https://www.kaggle.com/{}","LeetCode":"https://leetcode.com/{}",
+    "HackerRank":"https://www.hackerrank.com/{}","Codewars":"https://www.codewars.com/users/{}",
+    "Replit":"https://replit.com/@{}","CodePen":"https://codepen.io/{}","JSFiddle":"https://jsfiddle.net/user/{}",
+    "Gist":"https://gist.github.com/{}","DockerHub":"https://hub.docker.com/u/{}","PyPI":"https://pypi.org/user/{}",
+    "NPM":"https://www.npmjs.com/~{}","YouTube":"https://www.youtube.com/@{}","Twitch":"https://www.twitch.tv/{}",
+    "Vimeo":"https://vimeo.com/{}","Dailymotion":"https://www.dailymotion.com/{}",
+    "Rutube":"https://rutube.ru/channel/{}/","Kick":"https://kick.com/{}","Trovo":"https://trovo.live/{}",
+    "DLive":"https://dlive.tv/{}","Odysee":"https://odysee.com/@{}","PeerTube":"https://peertube.tv/@{}",
+    "Bitchute":"https://www.bitchute.com/channel/{}","Spotify":"https://open.spotify.com/user/{}",
+    "SoundCloud":"https://soundcloud.com/{}","Bandcamp":"https://{}.bandcamp.com/",
+    "Last.fm":"https://www.last.fm/user/{}","Mixcloud":"https://www.mixcloud.com/{}",
+    "Audiomack":"https://audiomack.com/{}","Deezer":"https://www.deezer.com/profile/{}",
+    "AppleMusic":"https://music.apple.com/profile/{}","Tidal":"https://tidal.com/user/{}",
+    "Shazam":"https://www.shazam.com/user/{}","Steam":"https://steamcommunity.com/id/{}",
+    "EpicGames":"https://store.epicgames.com/u/{}","Roblox":"https://www.roblox.com/user.aspx?username={}",
+    "Minecraft":"https://namemc.com/profile/{}","Chess.com":"https://www.chess.com/member/{}",
+    "Lichess":"https://lichess.org/@/{}","GOG":"https://www.gog.com/u/{}",
+    "Battle.net":"https://playoverwatch.com/career/{}/","Xbox":"https://account.xbox.com/profile?gamertag={}",
+    "PlayStation":"https://psnprofiles.com/{}","Nintendo":"https://nintendo.com/profile/{}",
+    "Avito":"https://www.avito.ru/user/{}","Youla":"https://youla.ru/user/{}",
+    "Ozon":"https://www.ozon.ru/seller/{}/","Wildberries":"https://www.wildberries.ru/seller/{}",
+    "AliExpress":"https://aliexpress.ru/store/{}","Etsy":"https://www.etsy.com/people/{}",
+    "eBay":"https://www.ebay.com/usr/{}","Amazon":"https://www.amazon.com/gp/profile/{}",
+    "Patreon":"https://www.patreon.com/{}","Boosty":"https://boosty.to/{}",
+    "BuyMeACoffee":"https://www.buymeacoffee.com/{}","Gumroad":"https://{}.gumroad.com/",
+    "Pikabu":"https://pikabu.ru/@{}","LiveJournal":"https://{}.livejournal.com/",
+    "Dzen":"https://dzen.ru/{}","VC.ru":"https://vc.ru/u/{}",
+    "2GIS":"https://2gis.ru/user/{}","Profi.ru":"https://profi.ru/profile/{}",
+    "YouDo":"https://youdo.com/user/{}","Avto.ru":"https://auto.ru/user/{}",
+    "Cian":"https://www.cian.ru/user/{}","DomClick":"https://domclick.ru/user/{}",
+    "YandexUslugi":"https://uslugi.yandex.ru/profile/{}","Tinder":"https://tinder.com/@{}",
+    "Badoo":"https://badoo.com/profile/{}","Mamba":"https://www.mamba.ru/profile/{}",
     "OkCupid":"https://www.okcupid.com/profile/{}","Fotostrana":"https://fotostrana.ru/user/{}",
-    "BitcoinTalk":"https://bitcointalk.org/index.php?action=profile;u={}","Airbnb":"https://www.airbnb.com/users/show/{}",
+    "LovePlanet":"https://loveplanet.ru/user/{}","Pure":"https://pure.app/user/{}",
+    "Feeld":"https://feeld.co/@{}","Hinge":"https://hinge.co/@{}","Bumble":"https://bumble.com/@{}",
+    "BitcoinTalk":"https://bitcointalk.org/index.php?action=profile;u={}",
+    "Etherscan":"https://etherscan.io/address/{}","OpenSea":"https://opensea.io/{}",
+    "Rarible":"https://rarible.com/{}","Binance":"https://www.binance.com/user/{}",
+    "Coinbase":"https://www.coinbase.com/{}","Airbnb":"https://www.airbnb.com/users/show/{}",
     "TripAdvisor":"https://www.tripadvisor.com/members/{}","Couchsurfing":"https://www.couchsurfing.com/people/{}",
-    "Wikipedia":"https://en.wikipedia.org/wiki/User:{}","Quora":"https://www.quora.com/profile/{}",
-    "Pastebin":"https://pastebin.com/u/{}","Keybase":"https://keybase.io/{}","Gravatar":"https://gravatar.com/{}",
-    "About.me":"https://about.me/{}","Linktree":"https://linktr.ee/{}","Taplink":"https://taplink.cc/{}",
-    "Blogger":"https://{}.blogspot.com/","WordPress":"https://{}.wordpress.com/","DeviantArt":"https://www.deviantart.com/{}",
     "Foursquare":"https://foursquare.com/{}","Strava":"https://www.strava.com/athletes/{}",
+    "AllTrails":"https://www.alltrails.com/members/{}","Komoot":"https://www.komoot.com/user/{}",
+    "Wikipedia":"https://en.wikipedia.org/wiki/User:{}","Quora":"https://www.quora.com/profile/{}",
+    "Pastebin":"https://pastebin.com/u/{}","Keybase":"https://keybase.io/{}",
+    "Gravatar":"https://gravatar.com/{}","About.me":"https://about.me/{}",
+    "Linktree":"https://linktr.ee/{}","Taplink":"https://taplink.cc/{}",
+    "Carrd":"https://{}.carrd.co/","Blogger":"https://{}.blogspot.com/",
+    "WordPress":"https://{}.wordpress.com/","DeviantArt":"https://www.deviantart.com/{}",
     "OnlyFans":"https://onlyfans.com/{}","Fansly":"https://fansly.com/{}",
+    "Weibo":"https://weibo.com/{}","Douyin":"https://www.douyin.com/user/{}",
+    "QQ":"https://user.qzone.qq.com/{}","Zhihu":"https://www.zhihu.com/people/{}",
+    "Bilibili":"https://space.bilibili.com/{}","Xiaohongshu":"https://www.xiaohongshu.com/user/profile/{}",
+    "Naver":"https://blog.naver.com/{}","Daum":"https://cafe.daum.net/{}",
+    "NicoNico":"https://www.nicovideo.jp/user/{}","Pixiv":"https://www.pixiv.net/users/{}",
+    "Note":"https://note.com/{}","FC2":"https://fc2.com/{}",
+    "Hatena":"https://profile.hatena.ne.jp/{}/","OK.ru":"https://ok.ru/{}",
+    "Mail.ru":"https://my.mail.ru/{}","VK Play":"https://vkplay.ru/{}",
+    "Yappy":"https://yappy.media/profile/{}","RUTUBE":"https://rutube.ru/channel/{}/",
+    "NUUM":"https://nuum.ru/{}","VK Video":"https://vk.com/video/@{}",
+    "TenChat":"https://tenchat.ru/{}","PressPal":"https://presspal.ru/{}",
+    "Mave":"https://mave.digital/@{}","Sponsr":"https://sponsr.ru/{}",
+    "Teletype":"https://teletype.in/@{}","Whales":"https://whales.ru/{}",
+    "TJournal":"https://tjournal.ru/u/{}","DTF":"https://dtf.ru/u/{}",
+    "Coub":"https://coub.com/{}","Figma":"https://www.figma.com/@{}",
+    "Notion":"https://{}.notion.site/{}","Trello":"https://trello.com/{}",
+    "Asana":"https://app.asana.com/user/{}","Slack":"https://{}.slack.com/",
+    "DiscordServers":"https://discord.com/servers/{}","TelegramChannel":"https://t.me/{}",
+    "TwitchPlays":"https://www.twitch.tv/{}","YouTubeGaming":"https://www.youtube.com/@{}",
+    "FacebookGaming":"https://fb.gg/{}","TrovoLive":"https://trovo.live/{}",
+    "Nonolive":"https://www.nonolive.com/{}","BigoLive":"https://www.bigo.tv/user/{}",
+    "Uplive":"https://uplive.tv/{}","LiveMe":"https://www.liveme.com/{}",
+    "YouNow":"https://www.younow.com/{}","IRL":"https://irl.tv/{}",
+    "Periscope":"https://www.periscope.tv/{}","Houseparty":"https://houseparty.com/{}",
+    "Clubhouse":"https://www.clubhouse.com/@{}","SpatialChat":"https://spatial.chat/{}",
+    "Gather":"https://gather.town/{}","RocketChat":"https://rocket.chat/{}",
+    "Mattermost":"https://mattermost.com/{}","Element":"https://element.io/{}",
+    "Wire":"https://wire.com/{}","Threema":"https://threema.ch/{}",
+    "Session":"https://getsession.org/{}","Status":"https://status.im/{}",
+    "Medium":"https://medium.com/@{}","Ghost":"https://{}.ghost.io/",
+    "Write.as":"https://write.as/{}","Telegraph":"https://telegra.ph/{}",
+    "Mirror":"https://mirror.xyz/{}","HackMD":"https://hackmd.io/@{}",
+    "Obsidian":"https://obsidian.md/{}","Roam":"https://roamresearch.com/{}",
+    "Logseq":"https://logseq.com/{}","RemNote":"https://www.remnote.com/{}",
+    "Anki":"https://ankiweb.net/{}","Quizlet":"https://quizlet.com/{}",
+    "Coursera":"https://www.coursera.org/user/{}","Udemy":"https://www.udemy.com/user/{}",
+    "Skillshare":"https://www.skillshare.com/user/{}","edX":"https://edx.org/{}",
+    "Duolingo":"https://www.duolingo.com/profile/{}","Memrise":"https://www.memrise.com/user/{}",
+    "ResearchGate":"https://www.researchgate.net/profile/{}","Academia":"https://academia.edu/{}",
+    "GoogleScholar":"https://scholar.google.com/citations?user={}","ORCID":"https://orcid.org/{}",
+    "Publons":"https://publons.com/{}","Scopus":"https://www.scopus.com/authid/{}",
 }
 
 def search_username(username):
     results = []
-    headers = {'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    headers = {'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'}
     for platform, url_tpl in SITES.items():
         try:
             url = url_tpl.format(username)
@@ -124,11 +186,10 @@ dp = Dispatcher(bot)
 
 @dp.message_handler(commands=['start'])
 async def start(msg: types.Message):
-    if msg.from_user.id not in WHITELIST: return
     await msg.answer(
         "<b>🕵️ FACTUM-OSINT</b>\n\n"
         "<b>Что умеет бот:</b>\n"
-        "• <b>Поиск по никнейму</b> — проверка на 100+ сайтах\n"
+        "• <b>Поиск по никнейму</b> — проверка на 355+ сайтах\n"
         "• <b>Поиск по email</b> — утечки и привязанные сервисы\n"
         "• <b>Поиск по номеру телефона</b> — оператор, утечки\n\n"
         "<b>Как использовать:</b>\n"
@@ -141,7 +202,6 @@ async def start(msg: types.Message):
 
 @dp.message_handler(commands=['add'])
 async def add(msg: types.Message):
-    if msg.from_user.id not in WHITELIST: return
     t = msg.text.replace('/add','').strip()
     if ':' not in t:
         await msg.answer("❌ Формат: <code>/add email:password</code>", parse_mode='HTML'); return
@@ -154,7 +214,6 @@ async def add(msg: types.Message):
 
 @dp.message_handler(commands=['search'])
 async def search(msg: types.Message):
-    if msg.from_user.id not in WHITELIST: return
     q = msg.text.replace('/search','').strip()
     conn = sqlite3.connect(DB_PATH); c = conn.cursor()
     c.execute("SELECT * FROM leaks WHERE email LIKE ? OR username LIKE ? OR phone LIKE ?",(f'%{q}%',)*3)
@@ -171,8 +230,6 @@ async def search(msg: types.Message):
 
 @dp.message_handler()
 async def handle(msg: types.Message):
-    if msg.from_user.id not in WHITELIST:
-        await msg.answer("⛔ Доступ запрещён."); return
     q = msg.text.strip()
     w = await msg.answer("🔍 <b>Выполняю поиск...</b>", parse_mode='HTML')
     try:
