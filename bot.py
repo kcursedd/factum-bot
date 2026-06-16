@@ -9,8 +9,8 @@ from datetime import datetime
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-API_TOKEN = os.getenv('TELEGRAM_TOKEN')
-WHITELIST = [int(x) for x in os.getenv('WHITELIST', '').split(',') if x]
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+WHITELIST = [int(x.strip()) for x in os.getenv('WHITELIST', '').split(',') if x.strip()]
 DB_PATH = 'factum.db'
 
 # База
@@ -119,7 +119,7 @@ def op_emoji(op):
     if 'tele2' in op: return '⚫'
     return '🏢'
 
-bot = Bot(token=API_TOKEN)
+bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
 
 @dp.message_handler(commands=['start'])
